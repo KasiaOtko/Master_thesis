@@ -1,7 +1,7 @@
 Master_thesis
 ==============================
 
-Code and data for master thesis project "Graph Neural Networks for social systems"
+Code and data for master thesis project "Graph Neural Networks for social systems".
 
 Project Organization
 ------------
