@@ -1,16 +1,16 @@
-import numpy as np
-import pandas as pd
-import torch
-from sklearn.linear_model import LogisticRegression
-from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import accuracy_score
-from sklearn.model_selection import train_test_split
 import argparse
 import logging
 
-from src.data.make_dataset import load_data
+import pandas as pd
+import torch
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 
 import wandb
+from src.data.make_dataset import load_data
+
 wandb.init(project="master-thesis")
 
 parser = argparse.ArgumentParser()
@@ -95,10 +95,3 @@ if __name__ == "__main__":
     data = load_data('ogbn-arxiv', 'data/raw')
     logging.info('Data loaded.')
     acc_table, final_score, best_model = LogReg(data)
-
-    
-
-    
-
-
-

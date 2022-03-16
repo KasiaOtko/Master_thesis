@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import logging
 import torch_geometric.data  # type: ignore
 from ogb.nodeproppred import PygNodePropPredDataset
 
