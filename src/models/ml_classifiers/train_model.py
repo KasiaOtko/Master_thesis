@@ -13,7 +13,6 @@ from src.data.make_dataset import load_data
 import wandb
 wandb.init(project="master-thesis")
 
-
 parser = argparse.ArgumentParser()
 parser.add_argument("dataset_name", choices=['ogbn-products', 'ogbn-arxiv', 'EU-judgements'],
                     help = "Name of the dataset to use (possible: 'ogbn-products', 'ogbn-arxiv', 'EU-judgements')")
@@ -22,7 +21,7 @@ parser.add_argument("--root", default = 'data/raw',
 parser.add_argument("--model", choices = ["lr", "rf", "xgb"],
                     help="Model to tune")
 
-logging.basicConfig(filename="logs/ml_classifiers/logfile.txt",
+logging.basicConfig(filename="logs/ml_classifiers.txt",
                     filemode='a',
                     level=logging.INFO, 
                     format='%(asctime)s %(levelname)-8s %(message)s', 
@@ -69,8 +68,10 @@ def LogReg(data, scale = True):
         lr = LogisticRegression(random_state=0, C = C, max_iter = 300).fit(X_train, y_train)
         y_train_pred = lr.predict(X_train)
         y_valid_pred = lr.predict(X_valid)
-        acc_table.loc[C, "Train_accuracy"] = accuracy_score(y_train, y_train_pred)
-        acc_table.loc[C, "Valid_accuracy"] = accuracy_score(y_valid, y_valid_pred)
+        acc_table.loc[C, "Train_accuracy"] = pd.to_numeric(accuracy_score(y_train, y_train_pred))
+        acc_table.loc[C, "Valid_accuracy"] = pd.to_numeric(accuracy_score(y_valid, y_valid_pred))
+        logging.info('C = %d: Train_accuracy = %f, Validation accuracy = %f', 
+                        C, acc_table.loc[C, "Train_accuracy"], acc_table.loc[C, "Valid_accuracy"])
 
     wandb_table = wandb.Table(dataframe=acc_table)
     wandb.log({'acc_table': wandb_table})
@@ -80,16 +81,19 @@ def LogReg(data, scale = True):
     y_test_pred = lr.predict(X_test)
     test_accuracy = accuracy_score(y_test, y_test_pred)
     wandb.log({'test_accuracy': test_accuracy})
+    
+    # maybe consider saving the df here
 
     return acc_table, test_accuracy, lr
 
 if __name__ == "__main__":
-
+    logging.info('Start.')
     #print(args.root)
     #print(args.dataset_name)
     
     #data = load_data(args.dataset_name, args.root)
     data = load_data('ogbn-arxiv', 'data/raw')
+    logging.info('Data loaded.')
     acc_table, final_score, best_model = LogReg(data)
 
     
