@@ -3,3 +3,5 @@ hyperparameters:
   max_iter: 1000
   random_state: 0
   scale: True
+dataset:
+  name: ogbn-arxiv

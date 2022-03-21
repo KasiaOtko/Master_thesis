@@ -1,0 +1,5 @@
+hyperparameters:
+  num_hidden: 512
+  scale: True
+dataset:
+  name: ogbn-arxiv

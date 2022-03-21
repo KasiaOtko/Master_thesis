@@ -3,7 +3,10 @@ import logging
 import sys
 
 import pandas as pd
+import numpy as pd
 import torch
+import torch.optim as optim
+import torch.nn as nn
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
@@ -13,6 +16,8 @@ from omegaconf import DictConfig, OmegaConf
 import wandb
 import hydra
 from src.data.make_dataset import load_data
+from src.models.utils import data_split
+from models.FFNN_model import FFNNClassifier
 
 sys.path.append("..")
 
@@ -39,27 +44,6 @@ logging.basicConfig(
 )
 
 # args = parser.parse_args()
-
-
-def data_split(data):
-
-    split_idx = data.get_idx_split()
-
-    data = data[0]
-
-    for key, idx in split_idx.items():
-        mask = torch.zeros(data.num_nodes, dtype=torch.bool)
-        mask[idx] = True
-        data[f"{key}_mask"] = mask
-
-    X_train = data.x[data["train_mask"]].numpy()
-    y_train = data.y[data["train_mask"]].numpy().ravel()
-    X_valid = data.x[data["valid_mask"]].numpy()
-    y_valid = data.y[data["valid_mask"]].numpy().ravel()
-    X_test = data.x[data["test_mask"]].numpy()
-    y_test = data.y[data["test_mask"]].numpy().ravel()
-
-    return X_train, y_train, X_valid, y_valid, X_test, y_test
 
 @hydra.main(config_path="../config", config_name="default_config.yaml")
 def LogReg(config : DictConfig):
@@ -123,6 +107,99 @@ def LogReg(config : DictConfig):
 
     return acc_table, test_accuracy, lr
 
+@hydra.main(config_path="../config", config_name="default_config.yaml")
+def train_Nnet(config):
+
+    print(f"configuration: \n {OmegaConf.to_yaml(config)}")
+    hparams = config.ffnn.hyperparameters
+    wandb.config = hparams
+    orig_cwd = hydra.utils.get_original_cwd()
+    logging.info("Configuration: {0}".format(config["ffnn"]["hyperparameters"]))
+
+    data = load_data(config.ffnn.dataset.name, orig_cwd + "/data/raw")
+    logging.info("Data loaded.")
+
+    X_train, y_train, X_valid, y_valid, X_test, y_test = data_split(data, to_tensor=True)
+    X_train = torch.Tensor(X_train)
+    y_train = torch.Tensor(y_train).long()
+    X_valid = torch.Tensor(X_valid)
+    y_valid = torch.Tensor(y_valid).long()
+
+    num_classes = len(np.unique(y_train))
+
+    model = FFNNClassifier(X_train.shape[1], hparams["num_hidden"], len(num_classes))
+
+    optimizer = optim.Adam(model.parameters(), lr=0.01, betas = (0.9, 0.999))
+    criterion = nn.CrossEntropyLoss()
+
+    # setting hyperparameters and gettings epoch sizes
+    batch_size = 500
+    num_epochs = 10
+    num_samples_train = X_train.shape[0]
+    num_batches_train = num_samples_train // batch_size
+    num_samples_valid = X_valid.shape[0]
+    num_batches_valid = num_samples_valid // batch_size
+
+    # setting up lists for handling loss/accuracy
+    train_acc, train_loss = [], []
+    valid_acc, valid_loss = [], []
+    test_acc, test_loss = [], []
+    cur_loss = 0
+    losses = []
+
+    get_slice = lambda i, size: range(i * size, (i + 1) * size)
+
+    for epoch in range(num_epochs):
+        # Forward -> Backprob -> Update params
+        ## Train
+        cur_loss = 0
+        model.train()
+        for i in range(num_batches_train):  # iterate over each batch
+            optimizer.zero_grad()
+            slce = get_slice(i, batch_size) # get the batch
+            output = model(X_train[slce])     # forward pass
+            
+            # compute gradients given loss
+            y_batch = y_train[slce]
+            batch_loss = criterion(output, y_batch) # compute loss
+            batch_loss.backward()                        # backward pass
+            optimizer.step()                             # update parameters
+            
+            cur_loss += batch_loss   
+        losses.append(cur_loss / batch_size) # average loss of all batches
+
+        model.eval()
+        ### Evaluate training
+        train_preds, train_targs = [], []
+        for i in range(num_batches_train):
+            slce = get_slice(i, batch_size)
+            output = model(X_train[slce])
+            
+            preds = torch.max(output, 1)[1]
+            
+            train_targs += list(y_train[slce].numpy())
+            train_preds += list(preds.data.numpy())
+        
+        ### Evaluate validation
+        val_preds, val_targs = [], []
+        for i in range(num_batches_valid):
+            slce = get_slice(i, batch_size)
+            
+            output = model(X_valid[slce])
+            preds = torch.max(output, 1)[1]
+            val_targs += list(y_valid[slce].numpy())
+            val_preds += list(preds.data.numpy()) 
+
+        train_acc_cur = accuracy_score(train_targs, train_preds)
+        valid_acc_cur = accuracy_score(val_targs, val_preds)
+        
+        train_acc.append(train_acc_cur)
+        valid_acc.append(valid_acc_cur)
+        
+        if epoch % 10 == 0:
+            print("Epoch %2i : Train Loss %f , Train acc %f, Valid acc %f" % (
+                    epoch+1, losses[-1], train_acc_cur, valid_acc_cur))
+
 if __name__ == "__main__":
     logging.info("")
     logging.info("Start.")
@@ -133,4 +210,5 @@ if __name__ == "__main__":
     #data = load_data("ogbn-arxiv", "data/raw")
     # logging.info("Data loaded.")
     wandb.init(project="master-thesis")
-    acc_table, final_score, best_model = LogReg()
+    # acc_table, final_score, best_model = LogReg()
+    train_Nnet()
