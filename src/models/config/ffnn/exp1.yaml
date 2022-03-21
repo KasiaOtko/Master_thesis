@@ -1,5 +1,7 @@
 hyperparameters:
   num_hidden: 512
+  batch_size: 500
+  epochs: 10
   scale: True
 dataset:
   name: ogbn-arxiv

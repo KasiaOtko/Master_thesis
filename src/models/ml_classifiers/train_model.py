@@ -3,7 +3,7 @@ import logging
 import sys
 
 import pandas as pd
-import numpy as pd
+import numpy as np
 import torch
 import torch.optim as optim
 import torch.nn as nn
@@ -30,7 +30,7 @@ parser.add_argument(
 parser.add_argument(
     "--root", default="data/raw", help="Root directory of a folder storing OGB dataset"
 )
-parser.add_argument("--model", choices=["lr", "svm", "xgb"], help="Model to tune")
+parser.add_argument("--model", choices=["lr", "ffnn", "xgb"], help="Model to tune")
 
 parser.add_argument("--lr_C_range", nargs="*", type=float, default=[0.01,0.1,1,10,100,1000], 
                     help="Regularization strength for Logistic Regression model")
@@ -57,14 +57,7 @@ def LogReg(config : DictConfig):
     data = load_data("ogbn-arxiv", orig_cwd + "/data/raw")
     logging.info("Data loaded.")
 
-    X_train, y_train, X_valid, y_valid, X_test, y_test = data_split(data)
-
-    if hparams["scale"]:
-        scaler = StandardScaler()
-        scaler = scaler.fit(X_train)
-        X_train = scaler.transform(X_train)
-        X_valid = scaler.transform(X_valid)
-        X_test = scaler.transform(X_test)
+    X_train, y_train, X_valid, y_valid, X_test, y_test = data_split(data, hparams["scale"])
 
     C_range = hparams["C_range"]  # [0.01,0.1,1,10,100, 1000]
     acc_table = pd.DataFrame(
@@ -119,22 +112,18 @@ def train_Nnet(config):
     data = load_data(config.ffnn.dataset.name, orig_cwd + "/data/raw")
     logging.info("Data loaded.")
 
-    X_train, y_train, X_valid, y_valid, X_test, y_test = data_split(data, to_tensor=True)
-    X_train = torch.Tensor(X_train)
-    y_train = torch.Tensor(y_train).long()
-    X_valid = torch.Tensor(X_valid)
-    y_valid = torch.Tensor(y_valid).long()
+    X_train, y_train, X_valid, y_valid, X_test, y_test = data_split(data, hparams["scale"], to_numpy=False)
 
     num_classes = len(np.unique(y_train))
 
-    model = FFNNClassifier(X_train.shape[1], hparams["num_hidden"], len(num_classes))
+    model = FFNNClassifier(X_train.shape[1], hparams["num_hidden"], num_classes)
 
     optimizer = optim.Adam(model.parameters(), lr=0.01, betas = (0.9, 0.999))
     criterion = nn.CrossEntropyLoss()
 
     # setting hyperparameters and gettings epoch sizes
-    batch_size = 500
-    num_epochs = 10
+    batch_size = hparams["batch_size"]
+    epochs = hparams["epochs"]
     num_samples_train = X_train.shape[0]
     num_batches_train = num_samples_train // batch_size
     num_samples_valid = X_valid.shape[0]
@@ -149,7 +138,7 @@ def train_Nnet(config):
 
     get_slice = lambda i, size: range(i * size, (i + 1) * size)
 
-    for epoch in range(num_epochs):
+    for epoch in range(epochs):
         # Forward -> Backprob -> Update params
         ## Train
         cur_loss = 0
@@ -165,7 +154,7 @@ def train_Nnet(config):
             batch_loss.backward()                        # backward pass
             optimizer.step()                             # update parameters
             
-            cur_loss += batch_loss   
+            cur_loss += batch_loss
         losses.append(cur_loss / batch_size) # average loss of all batches
 
         model.eval()
@@ -196,9 +185,12 @@ def train_Nnet(config):
         train_acc.append(train_acc_cur)
         valid_acc.append(valid_acc_cur)
         
-        if epoch % 10 == 0:
-            print("Epoch %2i : Train Loss %f , Train acc %f, Valid acc %f" % (
+        # if epoch % 10 == 0:
+        logging.info("Epoch %2i : Train Loss %f , Train acc %f, Valid acc %f" % (
                     epoch+1, losses[-1], train_acc_cur, valid_acc_cur))
+
+        wandb.log({"ffnn_loss": losses[-1], "ffnn_train_acc": train_acc_cur, "ffnn_valid_acc": valid_acc_cur})
+        
 
 if __name__ == "__main__":
     logging.info("")
