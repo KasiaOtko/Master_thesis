@@ -1,0 +1,3 @@
+defaults:
+    - log_reg: exp1
+#    - override hydra/job_logging: custom
