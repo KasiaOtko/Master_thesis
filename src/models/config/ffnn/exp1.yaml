@@ -1,7 +1,8 @@
 hyperparameters:
   num_hidden: 512
-  batch_size: 500
-  epochs: 10
+  batch_size: 1000
+  epochs: 20
   scale: True
 dataset:
-  name: ogbn-arxiv
+  name: ogbn-products
+  stratify: False

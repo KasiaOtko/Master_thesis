@@ -4,6 +4,7 @@ import sys
 
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 import torch
 import torch.optim as optim
 import torch.nn as nn
@@ -112,7 +113,11 @@ def train_Nnet(config):
     data = load_data(config.ffnn.dataset.name, orig_cwd + "/data/raw")
     logging.info("Data loaded.")
 
-    X_train, y_train, X_valid, y_valid, X_test, y_test = data_split(data, hparams["scale"], to_numpy=False)
+    X_train, y_train, X_valid, y_valid, X_test, y_test = data_split(data, 
+                                                                    hparams["scale"], 
+                                                                    to_numpy=False, 
+                                                                    random_split = True, 
+                                                                    stratify = config.ffnn.dataset.stratify)
 
     num_classes = len(np.unique(y_train))
 
@@ -134,7 +139,8 @@ def train_Nnet(config):
     valid_acc, valid_loss = [], []
     test_acc, test_loss = [], []
     cur_loss = 0
-    losses = []
+    train_losses = []
+    test_losses = []
 
     get_slice = lambda i, size: range(i * size, (i + 1) * size)
 
@@ -155,7 +161,7 @@ def train_Nnet(config):
             optimizer.step()                             # update parameters
             
             cur_loss += batch_loss
-        losses.append(cur_loss / batch_size) # average loss of all batches
+        train_losses.append(cur_loss / batch_size) # average loss of all batches
 
         model.eval()
         ### Evaluate training
@@ -175,9 +181,16 @@ def train_Nnet(config):
             slce = get_slice(i, batch_size)
             
             output = model(X_valid[slce])
+
+            y_batch = y_valid[slce]
+            batch_loss = criterion(output, y_batch)
+
             preds = torch.max(output, 1)[1]
             val_targs += list(y_valid[slce].numpy())
-            val_preds += list(preds.data.numpy()) 
+            val_preds += list(preds.data.numpy())
+        
+            cur_loss += batch_loss
+        test_losses.append(cur_loss / batch_size)
 
         train_acc_cur = accuracy_score(train_targs, train_preds)
         valid_acc_cur = accuracy_score(val_targs, val_preds)
@@ -186,10 +199,24 @@ def train_Nnet(config):
         valid_acc.append(valid_acc_cur)
         
         # if epoch % 10 == 0:
-        logging.info("Epoch %2i : Train Loss %f , Train acc %f, Valid acc %f" % (
-                    epoch+1, losses[-1], train_acc_cur, valid_acc_cur))
+        logging.info("Epoch %2i : Train Loss %f, Train acc %f, Valid acc %f" % (
+                    epoch+1, train_losses[-1], train_acc_cur, valid_acc_cur))
 
-        wandb.log({"ffnn_loss": losses[-1], "ffnn_train_acc": train_acc_cur, "ffnn_valid_acc": valid_acc_cur})
+        wandb.log({"ffnn_loss": train_losses[-1], "ffnn_train_acc": train_acc_cur, "ffnn_valid_acc": valid_acc_cur})
+
+        fig = plt.figure(figsize=(8, 5))
+        plt.plot(epochs, train_acc, 'r', epochs, valid_acc, 'b')
+        plt.legend(['Train Accucary','Validation Accuracy'])
+        plt.xlabel('Epochs'), plt.ylabel('Accuracy');
+        plt.savefig(f"{orig_cwd}/reports/figures/FFNN_accuracy_curve.png")
+        wandb.log({"plot": wandb.Image(fig)})
+
+        fig = plt.figure(figsize=(8, 5))
+        plt.plot(epochs, train_losses, 'r', epochs, test_losses, 'b')
+        plt.legend(['Train Loss','Validation Loss'])
+        plt.xlabel('Epochs'), plt.ylabel('Loss');
+        plt.savefig(f"{orig_cwd}/reports/figures/FFNN_loss_curve.png")
+        wandb.log({"plot": wandb.Image(fig)})
         
 
 if __name__ == "__main__":

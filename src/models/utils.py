@@ -1,23 +1,34 @@
 import torch
 from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
 
-def data_split(data, scale = True, to_numpy = False):
+def data_split(data, scale = True, to_numpy = False, random_split = False, stratify = True):
     
     split_idx = data.get_idx_split()
 
     data = data[0]
+    
+    if random_split: # according to the i.i.d. assumption
+        if stratify:
+            X_train, X_test, y_train, y_test = train_test_split(data.x, data.y, test_size=0.2, random_state=0, stratify = data.y)
+            X_train, X_valid, y_train, y_valid = train_test_split(X_train, y_train, test_size=0.25, random_state=1, stratify = y_train) # 0.25 x 0.8 = 0.2
+        else:
+            X_train, X_test, y_train, y_test = train_test_split(data.x, data.y, test_size=0.2, random_state=0)
+            X_train, X_valid, y_train, y_valid = train_test_split(X_train, y_train, test_size=0.25, random_state=1) # 0.25 x 0.8 = 0.2
 
-    for key, idx in split_idx.items():
-        mask = torch.zeros(data.num_nodes, dtype=torch.bool)
-        mask[idx] = True
-        data[f"{key}_mask"] = mask
+    else: # Use the splits provided by OGB
 
-    X_train = data.x[data["train_mask"]]    
-    y_train = data.y[data["train_mask"]]
-    X_valid = data.x[data["valid_mask"]]
-    y_valid = data.y[data["valid_mask"]]
-    X_test = data.x[data["test_mask"]]
-    y_test = data.y[data["test_mask"]]
+        for key, idx in split_idx.items():
+            mask = torch.zeros(data.num_nodes, dtype=torch.bool)
+            mask[idx] = True
+            data[f"{key}_mask"] = mask
+
+        X_train = data.x[data["train_mask"]]    
+        y_train = data.y[data["train_mask"]]
+        X_valid = data.x[data["valid_mask"]]
+        y_valid = data.y[data["valid_mask"]]
+        X_test = data.x[data["test_mask"]]
+        y_test = data.y[data["test_mask"]]
 
     if scale:
         x_mean, x_std = X_train.mean(), X_train.std()
