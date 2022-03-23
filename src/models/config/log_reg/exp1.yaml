@@ -5,5 +5,5 @@ hyperparameters:
   scale: True
   stratify: True
   random_split: True
-dataset:
-  name: ogbn-products
+  dataset:
+    name: ogbn-arxiv

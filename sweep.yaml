@@ -1,0 +1,23 @@
+program: ./src/models/ml_classifiers/train_model.py
+method: bayes
+entity: thekatin
+project: master-thesis
+metric:
+  goal: maximize
+  name: Test accuracy
+parameters:
+  ffnn.hyperparameters.num_hidden1:
+    values: [512, 800, 1028, 1300, 1700, 2024]
+  ffnn.hyperparameters.num_hidden2:
+    values: [258, 400, 512, 1028]
+  ffnn.hyperparameters.lr:
+    values: [0.0001, 0.001, 0.01, 0.1]
+  ffnn.hyperparameters.dropout_p:
+    values: [0, 0.1, 0.2, 0.3, 0.4]
+  ffnn.hyperparameters.batch_size:
+    values: [200, 500, 1000, 1500]
+command:
+  - ${env}
+  - python
+  - ${program}
+  - ${args_no_hyphens}

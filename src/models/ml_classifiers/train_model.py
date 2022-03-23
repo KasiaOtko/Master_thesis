@@ -25,7 +25,7 @@ from models.FFNN_model import FFNNClassifier
 sys.path.append("..")
 n_cores = multiprocessing.cpu_count()
 
-parser = argparse.ArgumentParser()
+# parser = argparse.ArgumentParser()
 # parser.add_argument(
     # "dataset_name",
     # choices=["ogbn-products", "ogbn-arxiv", "EU-judgements"],
@@ -47,18 +47,19 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 
-args = parser.parse_args()
+# args = parser.parse_args()
 
 @hydra.main(config_path="../config", config_name="default_config.yaml")
 def LogReg(config : DictConfig):
     
     print(f"configuration: \n {OmegaConf.to_yaml(config)}")
     hparams = config.log_reg.hyperparameters
-    wandb.config = hparams #.update(args)
+    wandb.init(project="master-thesis", config = hparams, group = "log_reg")
     orig_cwd = hydra.utils.get_original_cwd()
-    logging.info("Configuration: {0}".format(config["log_reg"]["hyperparameters"]))
+    logging.info("Configuration: {0}".format(hparams))
 
-    data = load_data("ogbn-arxiv", orig_cwd + "/data/raw")
+    data = load_data(hparams.dataset.name, orig_cwd + config.root)
+    log_details_to_wandb("log_reg", hparams)
     logging.info("Data loaded.")
 
     X_train, y_train, X_valid, y_valid, X_test, y_test = data_split(data,
@@ -99,7 +100,7 @@ def LogReg(config : DictConfig):
     lr.fit(X_train, y_train)
     y_test_pred = lr.predict(X_test)
     test_accuracy = accuracy_score(y_test, y_test_pred)
-    wandb.log({"test_accuracy": test_accuracy})
+    wandb.log({"Test accuracy": test_accuracy})
     logging.info("Finish")
 
     # maybe consider saving the df here
@@ -111,20 +112,19 @@ def train_Nnet(config):
 
     print(f"configuration: \n {OmegaConf.to_yaml(config)}")
     hparams = config.ffnn.hyperparameters
-    wandb.init(project="master-thesis", config = hparams)
+    wandb.init(project="master-thesis", config = hparams, group = "ffnn")
     orig_cwd = hydra.utils.get_original_cwd()
     logging.info("Configuration: {0}".format(hparams))
 
-    data = load_data(config.ffnn.dataset.name, orig_cwd + config.root) # "/data/raw"
-    # wandb.log({"dataset": config.ffnn.dataset.name, "random_split": config.ffnn.dataset.random_split})
-    log_details_to_wandb("ffnn", config)
+    data = load_data(hparams.dataset.name, orig_cwd + config.root)
+    log_details_to_wandb("ffnn", hparams)
     logging.info("Data loaded.")
 
     X_train, y_train, X_valid, y_valid, X_test, y_test = data_split(data, 
                                                                     hparams["scale"], 
                                                                     to_numpy=False, 
-                                                                    random_split = config.ffnn.dataset.random_split, 
-                                                                    stratify = config.ffnn.dataset.stratify)
+                                                                    random_split = hparams.dataset.random_split, 
+                                                                    stratify = hparams.dataset.stratify)
 
     num_classes = len(np.unique(y_train))
 
@@ -177,7 +177,7 @@ def train_Nnet(config):
             train_targs += list(y_train[slce].numpy())
             train_preds += list(preds.data.numpy())
 
-        train_losses.append((cur_loss / batch_size).detach().numpy()) # average loss of all batches
+        train_losses.append((cur_loss / num_batches_train).detach().numpy()) # average loss of all batches
 
         model.eval()        
         ### Evaluate validation
@@ -196,7 +196,7 @@ def train_Nnet(config):
             val_preds += list(preds.data.numpy())
         
             cur_loss += batch_loss
-        valid_losses.append((cur_loss / batch_size).detach().numpy())
+        valid_losses.append((cur_loss / num_batches_valid).detach().numpy())
 
         train_acc_cur = accuracy_score(train_targs, train_preds)
         valid_acc_cur = accuracy_score(val_targs, val_preds)
@@ -226,7 +226,7 @@ def train_Nnet(config):
         test_targs += list(y_test[slce].numpy())
         test_preds += list(preds.data.numpy())
     test_acc = accuracy_score(test_targs, test_preds)
-    logging.info("Test set evaluation: Loss %f, Accuracy %f" % (cur_loss/batch_size, test_acc))
+    logging.info("Test set evaluation: Loss %f, Accuracy %f" % (cur_loss/num_batches_test, test_acc))
     wandb.log({"Test accuracy": test_acc})
 
     fig = plt.figure(figsize=(8, 5))

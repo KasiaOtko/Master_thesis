@@ -53,7 +53,7 @@ def data_split(data, scale = True, to_numpy = False, random_split = False, strat
     return X_train, y_train, X_valid, y_valid, X_test, y_test
 
 
-def log_details_to_wandb(model, config):
+def log_details_to_wandb(model, hparams):
     wandb.log({"model": model,
-               "dataset": config[model].dataset.name, 
-               "random_split": config[model].dataset.random_split})
+               "dataset": hparams.dataset.name, 
+               "random_split": hparams.dataset.random_split})
