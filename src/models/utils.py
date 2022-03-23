@@ -1,6 +1,7 @@
 import torch
-from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
+
+import wandb
 
 def data_split(data, scale = True, to_numpy = False, random_split = False, stratify = True):
     
@@ -11,10 +12,10 @@ def data_split(data, scale = True, to_numpy = False, random_split = False, strat
     if random_split: # according to the i.i.d. assumption
         if stratify:
             X_train, X_test, y_train, y_test = train_test_split(data.x, data.y, test_size=0.2, random_state=0, stratify = data.y)
-            X_train, X_valid, y_train, y_valid = train_test_split(X_train, y_train, test_size=0.25, random_state=1, stratify = y_train) # 0.25 x 0.8 = 0.2
+            X_train, X_valid, y_train, y_valid = train_test_split(X_train, y_train, test_size=0.25, random_state=0, stratify = y_train) # 0.25 x 0.8 = 0.2
         else:
             X_train, X_test, y_train, y_test = train_test_split(data.x, data.y, test_size=0.2, random_state=0)
-            X_train, X_valid, y_train, y_valid = train_test_split(X_train, y_train, test_size=0.25, random_state=1) # 0.25 x 0.8 = 0.2
+            X_train, X_valid, y_train, y_valid = train_test_split(X_train, y_train, test_size=0.25, random_state=0) # 0.25 x 0.8 = 0.2
 
     else: # Use the splits provided by OGB
 
@@ -50,3 +51,9 @@ def data_split(data, scale = True, to_numpy = False, random_split = False, strat
         y_test = y_test.long().reshape(-1)
 
     return X_train, y_train, X_valid, y_valid, X_test, y_test
+
+
+def log_details_to_wandb(model, config):
+    wandb.log({"model": model,
+               "dataset": config[model].dataset.name, 
+               "random_split": config[model].dataset.random_split})

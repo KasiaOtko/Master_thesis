@@ -1,4 +1,4 @@
 defaults:
     - log_reg: exp1
     - ffnn: exp1
-#    - override hydra/job_logging: custom
+root: /data/raw
