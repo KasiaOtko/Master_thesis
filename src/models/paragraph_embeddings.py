@@ -1,8 +1,26 @@
 import numpy as np
+import pandas as pd
+import multiprocessing
+import sys
+import logging
 from nltk.tokenize import word_tokenize
 from gensim.models.doc2vec import Doc2Vec, TaggedDocument
 from src.data.make_dataset import load_data
 from src.models.utils import data_split, log_details_to_wandb
+import wandb
+import hydra
+from omegaconf import DictConfig, OmegaConf
+
+sys.path.append("..")
+n_cores = multiprocessing.cpu_count()
+
+logging.basicConfig(
+    filename="logs/ml_classifiers.txt",
+    filemode="a",
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)-8s %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 def tokenize(sentences):
     tokenized_doc = []
@@ -13,6 +31,20 @@ def tokenize(sentences):
 def tag_data(tokenized_doc):
     tagged_data = [TaggedDocument(d, [i]) for i, d in enumerate(tokenized_doc)]
     return tagged_data
+
+def prepare_sentences(links, cases):
+        temp = links[['CELEX_FROM', 'FROM_ID', 'text_from_clean', 'CELEX_TO', 'TO_ID', 'text_to_clean']].copy()
+        ID = [col for col in temp.columns if "ID" in col]
+        text = [col for col in temp.columns if "text" in col]
+        celex = [col for col in temp.columns if 'CELEX' in col]
+        temp = pd.lreshape(temp, {'ID': ID,'TEXT': text, 'CELEX': celex})
+        temp = temp.drop_duplicates()
+
+        temp = temp.merge(cases[["CELEX", "Category_encoded"]], how = "left", left_on = "CELEX", right_on = "CELEX")
+
+        sentences = temp.set_index("ID")
+
+        return sentences
 
 
 def infer_embeddings(model, tagged_data, temp, norm = True):
@@ -30,21 +62,29 @@ def infer_embeddings(model, tagged_data, temp, norm = True):
     return embeddings
 
 
-def generate_embeddings(sentences, param, common_params):
+def generate_embeddings(sentences, hparam, common_params):
 
     tokenized_doc = tokenize(sentences)
     tagged_data = tag_data(tokenized_doc)
     model = Doc2Vec(tagged_data,
-                              dm=param['dm'], vector_size=param['vector_size'], window=param['window'],
+                              dm=hparam['dm'], vector_size=hparam['vector_size'], window=hparam['window'],
                               **common_params)
 
     X = infer_embeddings(model, tagged_data, sentences, norm = True)
 
     return X
 
+@hydra.main(config_path="../config", config_name="default_config.yaml")
+def classify(config):
 
-def classify():
+    print(f"configuration: \n {OmegaConf.to_yaml(config)}")
+    hparams = config.doc2vec.hyperparameters
+    wandb.init(project="master-thesis", config = hparams, group = "ffnn")
+    orig_cwd = hydra.utils.get_original_cwd()
+    logging.info("Configuration: {0}".format(hparams))
 
-    data = load_data(hparams.dataset.name, orig_cwd + config.root)
+    links, cases = load_data(hparams.dataset.name, orig_cwd + config.root)
 
-    X = generate_embeddings(sentences, param, common_params)
+    sentences = prepare_sentences(links, cases)
+
+    X = generate_embeddings(sentences, hparams, hparams.common_params)

@@ -1,4 +1,5 @@
 defaults:
     - log_reg: exp1
     - ffnn: exp1
+    - doc2vec: exp1
 root: /data/raw
