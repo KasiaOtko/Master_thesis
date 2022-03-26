@@ -3,13 +3,14 @@ import pandas as pd
 import multiprocessing
 import sys
 import logging
+from sklearn.linear_model import LogisticRegression
 from nltk.tokenize import word_tokenize
 from gensim.models.doc2vec import Doc2Vec, TaggedDocument
 from src.data.make_dataset import load_data
 from src.models.utils import data_split, log_details_to_wandb
 import wandb
 import hydra
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import OmegaConf
 
 sys.path.append("..")
 n_cores = multiprocessing.cpu_count()
@@ -54,7 +55,7 @@ def infer_embeddings(model, tagged_data, temp, norm = True):
     embeddings = np.zeros((len(tagged_data), model.vector_size), dtype = 'object')
 
     for i in range(len(tagged_data)):
-        embeddings[i,:] = model.infer_vector(tagged_data[i].words, epochs = common_params['epochs'])
+        embeddings[i,:] = model.infer_vector(tagged_data[i].words)
         # Normalize vector
         if norm:
             embeddings[i,:] = embeddings[i,:]/np.linalg.norm(embeddings[i,:])
@@ -62,13 +63,13 @@ def infer_embeddings(model, tagged_data, temp, norm = True):
     return embeddings
 
 
-def generate_embeddings(sentences, hparam, common_params):
+def generate_embeddings(sentences, hparams):
 
     tokenized_doc = tokenize(sentences)
     tagged_data = tag_data(tokenized_doc)
     model = Doc2Vec(tagged_data,
-                              dm=hparam['dm'], vector_size=hparam['vector_size'], window=hparam['window'],
-                              **common_params)
+                              dm=hparams['dm'], vector_size=hparams['vector_size'], window=hparams['window'],
+                              **hparams.common_params)
 
     X = infer_embeddings(model, tagged_data, sentences, norm = True)
 
@@ -87,4 +88,15 @@ def classify(config):
 
     sentences = prepare_sentences(links, cases)
 
-    X = generate_embeddings(sentences, hparams, hparams.common_params)
+    X = generate_embeddings(sentences, hparams)
+
+    y = sentences.Category_encoded.values
+
+    X_train, y_train, X_valid, y_valid, X_test, y_test = data_split(X,
+                                                                    hparams["scale"],
+                                                                    random_split = hparams["random_split"],
+                                                                    stratify = hparams["stratify"])
+
+    # Evaluate embeddings - use them to classify the paragraphs
+    lr = LogisticRegression(random_state=0, max_iter = 2000, C = 100, n_jobs = n_cores)
+    lr.fit(X_train, y_train)

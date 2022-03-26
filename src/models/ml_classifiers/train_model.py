@@ -1,5 +1,3 @@
-import argparse
-from audioop import mul
 import logging
 import sys
 import multiprocessing
