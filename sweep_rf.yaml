@@ -1,0 +1,29 @@
+program: ./src/models/ml_classifiers/train_model.py
+method: bayes
+entity: thekatin
+project: master-thesis
+metric:
+  goal: maximize
+  name: valid_score
+parameters:
+  rf.hyperparameters.n_estimators:
+    values: [200, 350, 500, 750, 1000, 2000]
+  rf.hyperparameters.criterion:
+    values: [gini, entropy]
+  rf.hyperparameters.max_depth:
+    values: [50, 70, 100, 150, 200]
+  rf.hyperparameters.min_samples_split:
+    values: [100, 50, 20, 10, 2]
+  rf.hyperparameters.min_samples_leaf:
+    values: [50, 25, 10, 5, 1]
+  rf.hyperparameters.max_features:
+    values: [20, 30]
+  rf.hyperparameters.bootstrap:
+    value: True
+  rf.hyperparameters.dataset.name:
+    value: ogbn-arxiv
+command:
+  - ${env}
+  - python
+  - ${program}
+  - ${args_no_hyphens}

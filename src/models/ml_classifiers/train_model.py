@@ -12,6 +12,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.metrics import accuracy_score
+import xgboost as xgb
+from xgboost import XGBClassifier
 from omegaconf import DictConfig, OmegaConf
 
 import wandb
@@ -48,10 +50,11 @@ logging.basicConfig(
 # args = parser.parse_args()
 
 @hydra.main(config_path="../config", config_name="default_config.yaml")
-def LogReg(config : DictConfig):
+def Run_log_reg(config : DictConfig):
     
-    print(f"configuration: \n {OmegaConf.to_yaml(config)}")
+    # print(f"configuration: \n {OmegaConf.to_yaml(config)}")
     hparams = config.log_reg.hyperparameters
+    print(f"configuration: \n {OmegaConf.to_yaml(hparams)}")
     wandb.init(project="master-thesis", config = hparams, group = "log_reg")
     orig_cwd = hydra.utils.get_original_cwd()
     logging.info("Configuration: {0}".format(hparams))
@@ -108,8 +111,9 @@ def LogReg(config : DictConfig):
 @hydra.main(config_path="../config", config_name="default_config.yaml")
 def train_Nnet(config):
 
-    print(f"configuration: \n {OmegaConf.to_yaml(config)}")
+    # print(f"configuration: \n {OmegaConf.to_yaml(config)}")
     hparams = config.ffnn.hyperparameters
+    print(f"configuration: \n {OmegaConf.to_yaml(hparams)}")
     wandb.init(project="master-thesis", config = hparams, group = "ffnn")
     orig_cwd = hydra.utils.get_original_cwd()
     logging.info("Configuration: {0}".format(hparams))
@@ -241,48 +245,70 @@ def train_Nnet(config):
     plt.savefig(f"{orig_cwd}/reports/figures/FFNN_loss_curve.png")
     wandb.log({"loss_curve": wandb.Image(fig)})
 
-@hydra.main(config_path="../config", config_name="default_config.yaml")
-def RandomForest(config):
 
-    print(f"configuration: \n {OmegaConf.to_yaml(config)}")
+@hydra.main(config_path="../config", config_name="default_config.yaml")
+def Run_random_forest(config):
+
     hparams = config.rf.hyperparameters
-    wandb.config = hparams
+    print(f"configuration: \n {OmegaConf.to_yaml(hparams)}")
+    wandb.init(project="master-thesis", config = hparams, group = "rf")
     orig_cwd = hydra.utils.get_original_cwd()
     logging.info("Configuration: {0}".format(config["rf"]["hyperparameters"]))
 
-    data = load_data(config.rf.dataset.name, orig_cwd + "/data/raw")
-    wandb.log({"dataset": config.rf.dataset.name})
+    data = load_data(hparams.dataset.name, orig_cwd + "/data/raw")
+    wandb.log({"dataset": hparams.dataset.name})
     logging.info("Data loaded.")
 
     X_train, y_train, X_valid, y_valid, X_test, y_test = data_split(data, 
                                                                     hparams["scale"], 
                                                                     to_numpy=False, 
                                                                     random_split = True, 
-                                                                    stratify = config.rf.dataset.stratify)
+                                                                    stratify = hparams.dataset.stratify)
 
-    n_estimators = [int(x) for x in np.linspace(start = 500, stop = 2000, num = 4)]
-    max_features = ['sqrt', 'log2']
-    max_depth = [int(x) for x in np.linspace(50, 110, num = 6)]
-    max_depth.append(None)
-    min_samples_split = [2, 5, 10]
-    min_samples_leaf = [1, 2, 4]
-    bootstrap = [True, False]
+    # X_train, y_train, X_valid, y_valid = X_train[:100], y_train[:100], X_valid[:100], y_valid[:100] 
 
-    random_grid = {'n_estimators': n_estimators,
-                'max_features': max_features,
-                'max_depth': max_depth,
-                'min_samples_split': min_samples_split,
-                'min_samples_leaf': min_samples_leaf,
-                'bootstrap': bootstrap}
- 
-    rf = RandomForestClassifier()
-    rf_random = RandomizedSearchCV(estimator = rf, param_distributions = random_grid, n_iter = 10, verbose=2, random_state=0,
-                                n_jobs = n_cores)
+    rf = RandomForestClassifier(n_estimators = hparams['n_estimators'], criterion = hparams['criterion'], 
+                                max_depth = hparams['max_depth'], min_samples_split = hparams['min_samples_split'], 
+                                min_samples_leaf=hparams['min_samples_leaf'], max_features=hparams['max_features'], 
+                                bootstrap = hparams['bootstrap'],
+                                n_jobs = -1, verbose = 1, random_state = 0)
+    #rf_random = RandomizedSearchCV(estimator = rf, param_distributions = random_grid, n_iter = 10, verbose=2, random_state=0,
+                                #n_jobs = n_cores, cv = 3, return_train_score = True)
 
-    rf_random.fit(X_train, y_train)
+    #rf_random.fit(X_train, y_train)
+    
+    rf.fit(X_train, y_train)
+
+    train_pred = rf.predict(X_train)
+    valid_pred = rf.predict(X_valid)
+    train_score = accuracy_score(train_pred, y_train)
+    valid_score = accuracy_score(valid_pred, y_valid)
+    wandb.log({"train_score": train_score, "valid_score": valid_score})
+    logging.info("Train score %f, Validation score %f" % (train_score, valid_score))
+
+
+@hydra.main(config_path="../config", config_name="default_config.yaml")
+def run_XGBoost(config):
+
+    print(f"configuration: \n {OmegaConf.to_yaml(config)}")
+    hparams = config.xgb.hyperparameters
+    wandb.init(project="master-thesis", config = hparams, group = "xgb")
+    orig_cwd = hydra.utils.get_original_cwd()
+    logging.info("Configuration: {0}".format(config["xgb"]["hyperparameters"]))
+
+    data = load_data(hparams.dataset.name, orig_cwd + "/data/raw")
+    wandb.log({"dataset": hparams.dataset.name})
+    logging.info("Data loaded.")
+
+    X_train, y_train, X_valid, y_valid, X_test, y_test = data_split(data, 
+                                                                    hparams["scale"], 
+                                                                    to_numpy=False, 
+                                                                    random_split = True, 
+                                                                    stratify = hparams.dataset.stratify)
+    model = XGBClassifier()
+    model.fit(X_train, y_train)
     
 
 if __name__ == "__main__":
 
-    
-    train_Nnet()
+    Run_random_forest()

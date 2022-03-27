@@ -1,0 +1,13 @@
+hyperparameters:
+  n_estimators: 500
+  criterion: gini
+  max_depth: 70
+  min_samples_split: 20
+  min_samples_leaf: 10
+  max_features: 20
+  bootstrap: True
+  scale: False
+  dataset:
+    name: ogbn-arxiv
+    stratify: False
+    random_split: True
