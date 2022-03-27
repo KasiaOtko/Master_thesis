@@ -271,7 +271,7 @@ def Run_random_forest(config):
                                 max_depth = hparams['max_depth'], min_samples_split = hparams['min_samples_split'], 
                                 min_samples_leaf=hparams['min_samples_leaf'], max_features=hparams['max_features'], 
                                 bootstrap = hparams['bootstrap'],
-                                n_jobs = -1, verbose = 1, random_state = 0)
+                                n_jobs = 8, verbose = 1, random_state = 0)
     #rf_random = RandomizedSearchCV(estimator = rf, param_distributions = random_grid, n_iter = 10, verbose=2, random_state=0,
                                 #n_jobs = n_cores, cv = 3, return_train_score = True)
 

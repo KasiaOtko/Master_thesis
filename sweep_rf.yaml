@@ -7,17 +7,17 @@ metric:
   name: valid_score
 parameters:
   rf.hyperparameters.n_estimators:
-    values: [200, 350, 500, 750, 1000, 2000]
+    values: [350, 500, 750, 1000, 2000]
   rf.hyperparameters.criterion:
     values: [gini, entropy]
   rf.hyperparameters.max_depth:
-    values: [50, 70, 100, 150, 200]
+    values: [70, 100, 150, 200, 300]
   rf.hyperparameters.min_samples_split:
-    values: [100, 50, 20, 10, 2]
+    values: [20, 10, 5, 2]
   rf.hyperparameters.min_samples_leaf:
-    values: [50, 25, 10, 5, 1]
+    values: [10, 5, 3, 1]
   rf.hyperparameters.max_features:
-    values: [20, 30]
+    values: [auto, 20, 40]
   rf.hyperparameters.bootstrap:
     value: True
   rf.hyperparameters.dataset.name:
