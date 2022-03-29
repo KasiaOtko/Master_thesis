@@ -7,7 +7,8 @@ from sklearn.linear_model import LogisticRegression
 from nltk.tokenize import word_tokenize
 from gensim.models.doc2vec import Doc2Vec, TaggedDocument
 from src.data.make_dataset import load_data
-from src.models.utils import data_split, log_details_to_wandb
+from src.models.utils import data_split
+from models.FFNN_model import FFNNClassifier
 import wandb
 import hydra
 from omegaconf import OmegaConf
@@ -92,7 +93,7 @@ def classify(config):
 
     y = sentences.Category_encoded.values
 
-    X_train, y_train, X_valid, y_valid, X_test, y_test = data_split(X,
+    X_train, y_train, X_valid, y_valid, X_test, y_test = data_split((X, y),
                                                                     hparams["scale"],
                                                                     random_split = hparams["random_split"],
                                                                     stratify = hparams["stratify"])
