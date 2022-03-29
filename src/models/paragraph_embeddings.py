@@ -29,6 +29,14 @@ logging.basicConfig(
 )
 
 def train_NNet(X_train, y_train, X_valid, y_valid, X_test, y_test, hparams):
+
+    X_train = torch.from_numpy(X_train).float()
+    X_valid = torch.from_numpy(X_valid).float()
+    X_test = torch.from_numpy(X_test).float()
+    y_train = torch.from_numpy(y_train).long()
+    y_valid = torch.from_numpy(y_valid).long()
+    y_test = torch.from_numpy(y_test).long()
+
     num_classes = len(np.unique(y_train))
 
     model = FFNNClassifier(X_train.shape[1], hparams["num_hidden1"], hparams["num_hidden2"], hparams["num_hidden3"], num_classes, hparams["dropout_p"])
@@ -113,24 +121,24 @@ def train_NNet(X_train, y_train, X_valid, y_valid, X_test, y_test, hparams):
 
         wandb.log({"ffnn_train_loss": train_losses[-1].item(), "ffnn_train_acc": train_acc_cur, "ffnn_valid_acc": valid_acc_cur})
 
-        # Evaluate final model on the test set
-        test_targs, test_preds = [], []
-        cur_loss = 0
-        for i in range(num_batches_test):
-            slce = get_slice(i, batch_size)
-            
-            output = model(X_test[slce])
+    # Evaluate final model on the test set
+    test_targs, test_preds = [], []
+    cur_loss = 0
+    for i in range(num_batches_test):
+        slce = get_slice(i, batch_size)
+        
+        output = model(X_test[slce])
 
-            y_batch = y_test[slce]
-            batch_loss = criterion(output, y_batch)
-            cur_loss += batch_loss
+        y_batch = y_test[slce]
+        batch_loss = criterion(output, y_batch)
+        cur_loss += batch_loss
 
-            preds = torch.max(output, 1)[1]
-            test_targs += list(y_test[slce].numpy())
-            test_preds += list(preds.data.numpy())
-        test_acc = accuracy_score(test_targs, test_preds)
-        logging.info("Test set evaluation: Loss %f, Accuracy %f" % (cur_loss/num_batches_test, test_acc))
-        wandb.log({"Test accuracy": test_acc})
+        preds = torch.max(output, 1)[1]
+        test_targs += list(y_test[slce].numpy())
+        test_preds += list(preds.data.numpy())
+    test_acc = accuracy_score(test_targs, test_preds)
+    logging.info("Test set evaluation: Loss %f, Accuracy %f" % (cur_loss/num_batches_test, test_acc))
+        # wandb.log({"Test accuracy": test_acc})
 
     return train_acc[-1], valid_acc[-1], test_acc
 
@@ -180,11 +188,13 @@ def generate_embeddings(sentences, hparams):
     tagged_data = tag_data(tokenized_doc)
     model = Doc2Vec(tagged_data,
                               dm=hparams['dm'], vector_size=hparams['vector_size'], window=hparams['window'],
-                              min_count = hparams["min_count"], 
+                              min_count = hparams["min_count"], epochs = hparams["epochs"],
                               **hparams.common_params)
     logging.info("Model trained.")
 
     X = infer_embeddings(model, tagged_data, sentences, norm = True)
+
+    X = X.astype(float)
 
     return X
 
@@ -208,9 +218,12 @@ def classify(config):
 
     X_train, y_train, X_valid, y_valid, X_test, y_test = data_split((X, y),
                                                                     hparams["scale"],
-                                                                    random_split = hparams["random_split"],
+                                                                     random_split = hparams["random_split"],
                                                                     stratify = hparams["stratify"],
                                                                     dataset = "EU_judgements")
+
+
+
 
     # Evaluate embeddings - use them to classify the paragraphs
     # lr = LogisticRegression(random_state=0, max_iter = 2000, C = 100, n_jobs = n_cores)
@@ -228,8 +241,6 @@ def classify(config):
 
     wandb.log({"train_score": train_score, "valid_score": valid_score, "test_score": test_score})
     logging.info("Train score %f, Validation score %f, Test score %f" % (train_score, valid_score, test_score))
-
-    train_score, valid_score, test_score = train_NNet(X_train, y_train, X_valid, y_valid, X_test, y_test, hparams)
 
 
 if __name__ == "__main__":

@@ -17,6 +17,6 @@ def load_data(dataset_name: str, root: str) -> torch_geometric.data.Data:
         return dataset
     else:
         print(os.getcwd())
-        links = pd.read_csv(root + "/data/processed/eu_links_gcc.csv", index_col = 0, parse_dates = [4, 10])
-        cases = pd.read_csv(root + "/data/processed/eu_cases_gcc.csv", index_col = 0, parse_dates = [5, 6])
+        links = pd.read_csv(root + "/data/processed/eu_links_lang.csv", index_col = 0, parse_dates = [4, 10])
+        cases = pd.read_csv(root + "/data/processed/eu_cases_03_16.csv", index_col = 0, parse_dates = [5, 6])
         return links, cases

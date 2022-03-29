@@ -1,4 +1,4 @@
-program: ./src/models/ml_classifiers/train_model.py
+program: ./src/models/paragraph_embeddings.py
 method: bayes
 entity: thekatin
 project: master-thesis
@@ -6,22 +6,16 @@ metric:
   goal: maximize
   name: valid_score
 parameters:
-  rf.hyperparameters.n_estimators:
-    values: [350, 500, 750, 1000, 2000]
-  rf.hyperparameters.criterion:
-    values: [gini, entropy]
-  rf.hyperparameters.max_depth:
-    values: [70, 100, 150, 200, 300]
-  rf.hyperparameters.min_samples_split:
-    values: [20, 10, 5, 2]
-  rf.hyperparameters.min_samples_leaf:
-    values: [10, 5, 3, 1]
-  rf.hyperparameters.max_features:
-    values: [auto, 20, 40]
-  rf.hyperparameters.bootstrap:
-    value: True
-  rf.hyperparameters.dataset.name:
-    value: ogbn-arxiv
+  doc2vec.hyperparameters.dm:
+    values: [0, 1]
+  doc2vec.hyperparameters.vector_size:
+    values: [10, 20, 30, 40, 50]
+  doc2vec.hyperparameters.window:
+    values: [2, 3, 5, 6]
+  doc2vec.hyperparameters.min_count:
+    values: [1, 2, 3, 5]
+  doc2vec.hyperparameters.epochs:
+    values: [30, 40]
 command:
   - ${env}
   - python
