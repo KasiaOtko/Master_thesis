@@ -3,11 +3,13 @@ hyperparameters:
   vector_size: 20
   window: 3
   min_count: 2
-  epochs: 40
   common_params:
     negative: 5
     hs: 0
     sample: 0
+    epochs: 10
   random_split: True
   stratify: True
   scale: False
+  dataset:
+    name: EU_judgements

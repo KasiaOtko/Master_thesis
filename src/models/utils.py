@@ -54,7 +54,7 @@ def data_split(data, scale = True, to_numpy = False, random_split = False, strat
     else:
         if random_split:
             if stratify:
-                X_train, X_test, y_train, y_test = train_test_split(data[0], data[1], test_size=0.2, random_state=0, stratify = data.y)
+                X_train, X_test, y_train, y_test = train_test_split(data[0], data[1], test_size=0.2, random_state=0, stratify = data[1])
                 X_train, X_valid, y_train, y_valid = train_test_split(X_train, y_train, test_size=0.25, random_state=0, stratify = y_train) # 0.25 x 0.8 = 0.2
             else:
                 X_train, X_test, y_train, y_test = train_test_split(data[0], data[1], test_size=0.2, random_state=0)
