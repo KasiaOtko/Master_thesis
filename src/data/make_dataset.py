@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 import pandas as pd
+import numpy as np
 import torch_geometric.data  # type: ignore
 from ogb.nodeproppred import PygNodePropPredDataset
 
@@ -19,4 +20,7 @@ def load_data(dataset_name: str, root: str) -> torch_geometric.data.Data:
         print(os.getcwd())
         links = pd.read_csv(root + "/data/processed/eu_links_lang.csv", index_col = 0, parse_dates = [4, 10])
         cases = pd.read_csv(root + "/data/processed/eu_cases_03_16.csv", index_col = 0, parse_dates = [5, 6])
-        return links, cases
+        X = np.load(root + "/data/processed/paragraph_embeddings.npy")
+        y = links
+
+        return X, links, cases

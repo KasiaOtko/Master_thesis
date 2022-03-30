@@ -1,7 +1,13 @@
 hyperparameters:
-  eta: 0.2
-  max_depth: 20
-  objective: multi:softprob
+  eta: 0.05
+  learning_rate: 0.2
+  min_child_weight: 1.5
+  subsample: 0.7
+  max_depth: 10
+  gamma: 0.3
+  num_round: 30
+  colsample_bytree: 1
+  objective: multi:softmax
   tree_method: hist
   scale: False
   dataset:

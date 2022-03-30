@@ -76,8 +76,8 @@ def prediction_scores(model, X_train, y_train, X_valid, y_valid, X_test = None, 
     
     train_score = accuracy_score(train_pred, y_train)
     valid_score = accuracy_score(valid_pred, y_valid)
-    
-    if X_train:
+
+    if X_test is not None:
         test_pred = model.predict(X_test)
         test_score = accuracy_score(test_pred, y_test)
         return train_score, valid_score, test_score

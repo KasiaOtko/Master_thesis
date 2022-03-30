@@ -142,15 +142,18 @@ def train_NNet(X_train, y_train, X_valid, y_valid, X_test, y_test, hparams):
 
     return train_acc[-1], valid_acc[-1], test_acc
 
+
 def tokenize(sentences):
     tokenized_doc = []
     for d in sentences.TEXT:
         tokenized_doc.append(word_tokenize(d.lower()))
     return tokenized_doc
 
+
 def tag_data(tokenized_doc):
     tagged_data = [TaggedDocument(d, [i]) for i, d in enumerate(tokenized_doc)]
     return tagged_data
+
 
 def prepare_sentences(links, cases):
         temp = links[['CELEX_FROM', 'FROM_ID', 'text_from_clean', 'CELEX_TO', 'TO_ID', 'text_to_clean']].copy()
@@ -188,7 +191,7 @@ def generate_embeddings(sentences, hparams):
     tagged_data = tag_data(tokenized_doc)
     model = Doc2Vec(tagged_data,
                               dm=hparams['dm'], vector_size=hparams['vector_size'], window=hparams['window'],
-                              min_count = hparams["min_count"], epochs = hparams["epochs"],
+                              min_count = hparams["min_count"], epochs = 1,
                               **hparams.common_params)
     logging.info("Model trained.")
 
@@ -207,7 +210,7 @@ def classify(config):
     orig_cwd = hydra.utils.get_original_cwd()
     logging.info("Configuration: {0}".format(hparams))
 
-    links, cases = load_data(hparams.dataset.name, orig_cwd)
+    X, links, cases = load_data(hparams.dataset.name, orig_cwd)
 
     sentences = prepare_sentences(links, cases)
 

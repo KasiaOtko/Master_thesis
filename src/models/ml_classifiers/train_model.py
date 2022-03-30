@@ -101,7 +101,7 @@ def Run_log_reg(config : DictConfig):
 
     lr = LogisticRegression(random_state=hparams["random_state"], C=C_final, max_iter=hparams["max_iter"])
     lr.fit(X_train, y_train)
-    
+
     train_score, valid_score, test_score = prediction_scores(lr, X_train, y_train, X_valid, y_valid, X_test, y_test)
     wandb.log({"train_score": train_score, "valid_score": valid_score, "test_score": test_score})
     logging.info("Train score %f, Validation score %f, Test score %f" % (train_score, valid_score, test_score))
@@ -292,8 +292,8 @@ def Run_random_forest(config):
 @hydra.main(config_path="../config", config_name="default_config.yaml")
 def run_XGBoost(config):
 
-    print(f"configuration: \n {OmegaConf.to_yaml(config)}")
     hparams = config.xgb.hyperparameters
+    print(f"configuration: \n {OmegaConf.to_yaml(hparams)}")
     wandb.init(project="master-thesis", config = hparams, group = "xgb")
     orig_cwd = hydra.utils.get_original_cwd()
     logging.info("Configuration: {0}".format(config["xgb"]["hyperparameters"]))
@@ -302,26 +302,43 @@ def run_XGBoost(config):
     wandb.log({"dataset": hparams.dataset.name})
     logging.info("Data loaded.")
 
-    X_train, y_train, X_valid, y_valid, X_test, y_test = data_split(data, 
+    X_train, y_train, X_valid, y_valid, X_test, y_test = data_split(data,
                                                                     hparams["scale"], 
-                                                                    to_numpy=False, 
+                                                                    to_numpy=True, 
                                                                     random_split = True, 
                                                                     stratify = hparams.dataset.stratify)
 
-    D_train = xgb.DMatrix(X_train, label=y_train)
-    D_valid = xgb.DMatrix(X_valid, label=y_valid)
-    D_test = xgb.DMatrix(X_test, label=y_test)
+    # X_train, y_train, X_valid, y_valid, X_test, y_test = X_train[:100], y_train[:100], X_valid[:100], y_valid[:100], X_test[:100], y_test[:100]
 
-    param = {
-    'eta': hparams["eta"], 
-    'max_depth': hparams["max_depth"],  
-    'objective': hparams["objective"],
-    'num_class': len(np.unique(y_train))} 
-    steps = 20
+    xgb.config_context(verbosity = 3)
+    evalset = [(X_train, y_train), (X_valid, y_valid)]
+    model = xgb.XGBClassifier(n_estimators = hparams["num_round"], max_depth = hparams["max_depth"],
+                              learning_rate = hparams["eta"], objective = hparams["objective"],
+                              tree_method = hparams["tree_method"], n_jobs = n_cores, gamma = hparams["gamma"],
+                              min_child_weight  = hparams["min_child_weight"],
+                              subsample = hparams["subsample"], colsample_bytree = hparams["colsample_bytree"])
 
-    model = xgb.train(param, D_train, steps)
+    model.fit(X_train, y_train, early_stopping_rounds=5, eval_metric=['mlogloss', 'merror'], eval_set=evalset, verbose = True)
 
-    train_score, valid_score, test_score = prediction_scores(model, D_train, y_train, D_valid, y_valid, D_test, y_test)
+    results = model.evals_result()
+
+    fig = plt.figure(figsize = (8, 5))
+    plt.plot(results['validation_0']['mlogloss'], label='train')
+    plt.plot(results['validation_1']['mlogloss'], label='validation')
+    plt.title("XGB Log Loss")
+    plt.legend()
+    plt.savefig(f"{orig_cwd}/reports/figures/xgb_loss_curve.png")
+    wandb.log({"loss_curve": wandb.Image(fig)})
+
+    fig = plt.figure(figsize = (8, 5))
+    plt.plot(1-np.array(results['validation_0']['merror']), label='train')
+    plt.plot(1-np.array(results['validation_1']['merror']), label='validation')
+    plt.title("XGB Accuracy score")
+    plt.legend()
+    plt.savefig(f"{orig_cwd}/reports/figures/xgb_accuracy_curve.png")
+    wandb.log({"accuracy_curve": wandb.Image(fig)})
+
+    train_score, valid_score, test_score = prediction_scores(model, X_train, y_train, X_valid, y_valid, X_test, y_test)
     wandb.log({"train_score": train_score, "valid_score": valid_score, "test_score": test_score})
     logging.info("Train score %f, Validation score %f, Test score %f" % (train_score, valid_score, test_score))
     

@@ -1,0 +1,29 @@
+program: ./src/models/ml_classifiers/train_model.py
+method: bayes
+entity: thekatin
+project: master-thesis
+metric:
+  goal: maximize
+  name: valid_score
+parameters:
+  xgb.hyperparameters.num_round:
+    value: 50
+  xgb.hyperparameters.learning_rate:
+    values: [0.05, 0.1, 0.2, 0.3]
+  xgb.hyperparameters.max_depth:
+    values: [10, 15, 20, 25]
+  xgb.hyperparameters.eta:
+    values: [0.05, 0.1, 0.2, 0.3]
+  xgb.hyperparameters.gamma:
+    values: [0.05, 0.1, 0.2, 0.3]
+  xgb.hyperparameters.min_child_weight:
+    values: [0.5, 1, 1.5, 2]
+  xgb.hyperparameters.subsample:
+    values: [1, 0.75, 0.5]
+  xgb.hyperparameters.dataset.name:
+    value: ogbn-arxiv
+command:
+  - ${env}
+  - python
+  - ${program}
+  - ${args_no_hyphens}
