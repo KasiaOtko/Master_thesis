@@ -1,0 +1,10 @@
+hyperparameters:
+  eta: 0.2
+  max_depth: 20
+  objective: multi:softprob
+  tree_method: hist
+  scale: False
+  dataset:
+    name: ogbn-arxiv
+    stratify: False
+    random_split: True

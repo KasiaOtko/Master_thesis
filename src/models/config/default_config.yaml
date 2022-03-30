@@ -3,4 +3,6 @@ defaults:
     - ffnn: exp1
     - doc2vec: exp1
     - rf: exp1
+    - xgb: exp1
+    - svm: exp1
 root: /data/raw

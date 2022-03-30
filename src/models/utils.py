@@ -1,5 +1,6 @@
 import torch
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
 
 import wandb
 
@@ -67,3 +68,20 @@ def log_details_to_wandb(model, hparams):
     wandb.log({"model": model,
                "dataset": hparams.dataset.name, 
                "random_split": hparams.dataset.random_split})
+
+def prediction_scores(model, X_train, y_train, X_valid, y_valid, X_test = None, y_test = None):
+
+    train_pred = model.predict(X_train)
+    valid_pred = model.predict(X_valid)
+    
+    train_score = accuracy_score(train_pred, y_train)
+    valid_score = accuracy_score(valid_pred, y_valid)
+    
+    if X_train:
+        test_pred = model.predict(X_test)
+        test_score = accuracy_score(test_pred, y_test)
+        return train_score, valid_score, test_score
+    else:
+        return train_score, valid_score
+
+    

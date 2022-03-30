@@ -10,16 +10,17 @@ import torch.optim as optim
 import torch.nn as nn
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
+import xgboost as xgb
+from sklearn.svm import SVC
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.metrics import accuracy_score
-import xgboost as xgb
-from xgboost import XGBClassifier
+
 from omegaconf import DictConfig, OmegaConf
 
 import wandb
 import hydra
 from src.data.make_dataset import load_data
-from src.models.utils import data_split, log_details_to_wandb
+from src.models.utils import data_split, log_details_to_wandb, prediction_scores
 from models.FFNN_model import FFNNClassifier
 
 sys.path.append("..")
@@ -97,16 +98,17 @@ def Run_log_reg(config : DictConfig):
     C_final = pd.to_numeric(
         acc_table[~acc_table["Valid_accuracy"].isna()]["Valid_accuracy"]
     ).idxmax()
+
     lr = LogisticRegression(random_state=hparams["random_state"], C=C_final, max_iter=hparams["max_iter"])
     lr.fit(X_train, y_train)
-    y_test_pred = lr.predict(X_test)
-    test_accuracy = accuracy_score(y_test, y_test_pred)
-    wandb.log({"Test accuracy": test_accuracy})
-    logging.info("Finish")
+    
+    train_score, valid_score, test_score = prediction_scores(lr, X_train, y_train, X_valid, y_valid, X_test, y_test)
+    wandb.log({"train_score": train_score, "valid_score": valid_score, "test_score": test_score})
+    logging.info("Train score %f, Validation score %f, Test score %f" % (train_score, valid_score, test_score))
+    # y_test_pred = lr.predict(X_test)
+    # test_accuracy = accuracy_score(y_test, y_test_pred)
+    # wandb.log({"Test accuracy": test_accuracy})
 
-    # maybe consider saving the df here
-
-    return acc_table, test_accuracy, lr
 
 @hydra.main(config_path="../config", config_name="default_config.yaml")
 def train_Nnet(config):
@@ -305,10 +307,51 @@ def run_XGBoost(config):
                                                                     to_numpy=False, 
                                                                     random_split = True, 
                                                                     stratify = hparams.dataset.stratify)
-    model = XGBClassifier()
-    model.fit(X_train, y_train)
+
+    D_train = xgb.DMatrix(X_train, label=y_train)
+    D_valid = xgb.DMatrix(X_valid, label=y_valid)
+    D_test = xgb.DMatrix(X_test, label=y_test)
+
+    param = {
+    'eta': hparams["eta"], 
+    'max_depth': hparams["max_depth"],  
+    'objective': hparams["objective"],
+    'num_class': len(np.unique(y_train))} 
+    steps = 20
+
+    model = xgb.train(param, D_train, steps)
+
+    train_score, valid_score, test_score = prediction_scores(model, D_train, y_train, D_valid, y_valid, D_test, y_test)
+    wandb.log({"train_score": train_score, "valid_score": valid_score, "test_score": test_score})
+    logging.info("Train score %f, Validation score %f, Test score %f" % (train_score, valid_score, test_score))
     
+
+@hydra.main(config_path="../config", config_name="default_config.yaml")
+def runSVM(config):
+    print(f"configuration: \n {OmegaConf.to_yaml(config)}")
+    hparams = config.svm.hyperparameters
+    wandb.init(project="master-thesis", config = hparams, group = "svm")
+    orig_cwd = hydra.utils.get_original_cwd()
+    logging.info("Configuration: {0}".format(config["svm"]["hyperparameters"]))
+
+    data = load_data(hparams.dataset.name, orig_cwd + "/data/raw")
+    wandb.log({"dataset": hparams.dataset.name})
+    logging.info("Data loaded.")
+
+    X_train, y_train, X_valid, y_valid, X_test, y_test = data_split(data, 
+                                                                    hparams["scale"], 
+                                                                    to_numpy=False, 
+                                                                    random_split = True, 
+                                                                    stratify = hparams.dataset.stratify)
+
+    model = SVC()
+    model.fit(X_train, y_train)
+
+    train_score, valid_score, test_score = prediction_scores(model, X_train, y_train, X_valid, y_valid, X_test, y_test)
+    wandb.log({"train_score": train_score, "valid_score": valid_score, "test_score": test_score})
+    logging.info("Train score %f, Validation score %f, Test score %f" % (train_score, valid_score, test_score))
+
 
 if __name__ == "__main__":
 
-    Run_random_forest()
+    run_XGBoost()
