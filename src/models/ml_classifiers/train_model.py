@@ -14,6 +14,8 @@ import xgboost as xgb
 from sklearn.svm import SVC
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.metrics import accuracy_score
+from sklearnex import patch_sklearn 
+
 
 from omegaconf import DictConfig, OmegaConf
 
@@ -344,9 +346,10 @@ def run_XGBoost(config):
     
 
 @hydra.main(config_path="../config", config_name="default_config.yaml")
-def runSVM(config):
-    print(f"configuration: \n {OmegaConf.to_yaml(config)}")
+def run_SVM(config):
+    
     hparams = config.svm.hyperparameters
+    print(f"configuration: \n {OmegaConf.to_yaml(hparams)}")
     wandb.init(project="master-thesis", config = hparams, group = "svm")
     orig_cwd = hydra.utils.get_original_cwd()
     logging.info("Configuration: {0}".format(config["svm"]["hyperparameters"]))
@@ -355,14 +358,17 @@ def runSVM(config):
     wandb.log({"dataset": hparams.dataset.name})
     logging.info("Data loaded.")
 
+    patch_sklearn()
+    
     X_train, y_train, X_valid, y_valid, X_test, y_test = data_split(data, 
                                                                     hparams["scale"], 
                                                                     to_numpy=False, 
                                                                     random_split = True, 
                                                                     stratify = hparams.dataset.stratify)
 
-    model = SVC()
+    model = SVC(C = 100, kernel = "rbf", gamma = "scale", verbose = True, decision_function_shape = 'ovo')
     model.fit(X_train, y_train)
+    logging.info("SVM trained. Making predictions.")
 
     train_score, valid_score, test_score = prediction_scores(model, X_train, y_train, X_valid, y_valid, X_test, y_test)
     wandb.log({"train_score": train_score, "valid_score": valid_score, "test_score": test_score})
@@ -371,4 +377,4 @@ def runSVM(config):
 
 if __name__ == "__main__":
 
-    run_XGBoost()
+    run_SVM()

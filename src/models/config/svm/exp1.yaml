@@ -1,1 +1,5 @@
-hyperparameters: 1
+hyperparameters:
+  scale: False
+  dataset:
+    name: ogbn-arxiv
+    stratify: False
