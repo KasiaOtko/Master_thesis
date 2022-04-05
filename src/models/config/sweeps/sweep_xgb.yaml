@@ -21,7 +21,7 @@ parameters:
   xgb.hyperparameters.subsample:
     values: [1, 0.75, 0.5]
   xgb.hyperparameters.dataset.name:
-    value: ogbn-arxiv
+    value: ogbn-products
 command:
   - ${env}
   - python

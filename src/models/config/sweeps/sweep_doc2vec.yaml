@@ -7,15 +7,15 @@ metric:
   name: valid_score
 parameters:
   doc2vec.hyperparameters.dm:
-    values: [0, 1]
+    value: 0
   doc2vec.hyperparameters.vector_size:
-    values: [10, 20, 30, 40, 50]
+    values: [30, 40, 50]
   doc2vec.hyperparameters.window:
     values: [2, 3, 5, 6]
   doc2vec.hyperparameters.min_count:
-    values: [1, 2, 3, 5]
+    values: [2, 3, 5]
   doc2vec.hyperparameters.epochs:
-    values: [30, 40]
+    value: 40
 command:
   - ${env}
   - python

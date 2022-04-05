@@ -191,7 +191,7 @@ def generate_embeddings(sentences, hparams):
     tagged_data = tag_data(tokenized_doc)
     model = Doc2Vec(tagged_data,
                               dm=hparams['dm'], vector_size=hparams['vector_size'], window=hparams['window'],
-                              min_count = hparams["min_count"], epochs = 1,
+                              min_count = hparams["min_count"], epochs = hparams['epochs'],
                               **hparams.common_params)
     logging.info("Model trained.")
 
@@ -210,7 +210,7 @@ def classify(config):
     orig_cwd = hydra.utils.get_original_cwd()
     logging.info("Configuration: {0}".format(hparams))
 
-    X, links, cases = load_data(hparams.dataset.name, orig_cwd)
+    links, cases = load_data(hparams.dataset.name, orig_cwd)
 
     sentences = prepare_sentences(links, cases)
 
@@ -221,7 +221,7 @@ def classify(config):
 
     X_train, y_train, X_valid, y_valid, X_test, y_test = data_split((X, y),
                                                                     hparams["scale"],
-                                                                     random_split = hparams["random_split"],
+                                                                    random_split = hparams["random_split"],
                                                                     stratify = hparams["stratify"],
                                                                     dataset = "EU_judgements")
 

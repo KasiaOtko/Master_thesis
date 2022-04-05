@@ -22,7 +22,7 @@ from omegaconf import DictConfig, OmegaConf
 import wandb
 import hydra
 from src.data.make_dataset import load_data
-from src.models.utils import data_split, log_details_to_wandb, prediction_scores
+from src.models.utils import data_split, log_details_to_wandb, prediction_scores, remove_outstanding_classes_from_testset
 from models.FFNN_model import FFNNClassifier
 
 sys.path.append("..")
@@ -127,10 +127,10 @@ def train_Nnet(config):
     logging.info("Data loaded.")
 
     X_train, y_train, X_valid, y_valid, X_test, y_test = data_split(data, 
-                                                                    hparams["scale"], 
+                                                                    scale=hparams.dataset.scale, 
                                                                     to_numpy=False, 
-                                                                    random_split = hparams.dataset.random_split, 
-                                                                    stratify = hparams.dataset.stratify)
+                                                                    random_split=hparams.dataset.random_split, 
+                                                                    stratify=hparams.dataset.stratify)
 
     num_classes = len(np.unique(y_train))
 
@@ -172,9 +172,9 @@ def train_Nnet(config):
             
             # compute gradients given loss
             y_batch = y_train[slce]
-            batch_loss = criterion(output, y_batch) # compute loss
-            batch_loss.backward()                        # backward pass
-            optimizer.step()                             # update parameters
+            batch_loss = criterion(output, y_batch)     # compute loss
+            batch_loss.backward()                       # backward pass
+            optimizer.step()                            # update parameters
             
             cur_loss += batch_loss
             
@@ -217,6 +217,9 @@ def train_Nnet(config):
         wandb.log({"ffnn_train_loss": train_losses[-1].item(), "ffnn_train_acc": train_acc_cur, "ffnn_valid_acc": valid_acc_cur})
 
     # Evaluate final model on the test set
+    if ~hparams.dataset.random_split:
+        y_test, X_test = remove_outstanding_classes_from_testset(y_test, X_test)
+    num_batches_test = X_test.shape[0] // batch_size
     test_targs, test_preds = [], []
     cur_loss = 0
     for i in range(num_batches_test):
@@ -229,8 +232,9 @@ def train_Nnet(config):
         cur_loss += batch_loss
 
         preds = torch.max(output, 1)[1]
-        test_targs += list(y_test[slce].numpy())
-        test_preds += list(preds.data.numpy())
+        test_targs += list(y_test[slce].numpy()) # 
+        test_preds += list(preds.data.numpy()) # 
+
     test_acc = accuracy_score(test_targs, test_preds)
     logging.info("Test set evaluation: Loss %f, Accuracy %f" % (cur_loss/num_batches_test, test_acc))
     wandb.log({"Test accuracy": test_acc})
@@ -377,4 +381,4 @@ def run_SVM(config):
 
 if __name__ == "__main__":
 
-    run_SVM()
+    train_Nnet()

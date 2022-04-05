@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 
@@ -85,11 +86,12 @@ def prediction_scores(model, X_train, y_train, X_valid, y_valid, X_test = None, 
         return train_score, valid_score
 
 
-def remove_outstanding_classes_from_testset(y_test, y_pred):
+def remove_outstanding_classes_from_testset(y_test, X_test):
 
     outstanding_classes = [42, 43, 44, 45, 46]
 
-    mask = ~sum(y_test[y_test==i] for i in outstanding_classes).bool()
-    mask_idx = mask.reshape(-1).nonzero().reshape(-1)
+    mask = sum(y_test==i for i in outstanding_classes)
+    mask = np.invert(np.array(mask, dtype = bool))
+    mask_idx = mask.reshape(-1).nonzero()[0].reshape(-1)
  
-    return y_test[mask_idx], y_pred[mask_idx]
+    return y_test[mask_idx], X_test[mask_idx, :]# , y_pred[mask_idx]
