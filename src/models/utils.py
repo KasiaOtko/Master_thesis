@@ -84,4 +84,12 @@ def prediction_scores(model, X_train, y_train, X_valid, y_valid, X_test = None, 
     else:
         return train_score, valid_score
 
-    
+
+def remove_outstanding_classes_from_testset(y_test, y_pred):
+
+    outstanding_classes = [42, 43, 44, 45, 46]
+
+    mask = ~sum(y_test[y_test==i] for i in outstanding_classes).bool()
+    mask_idx = mask.reshape(-1).nonzero().reshape(-1)
+ 
+    return y_test[mask_idx], y_pred[mask_idx]
