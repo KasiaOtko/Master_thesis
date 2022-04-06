@@ -1,4 +1,4 @@
-program: ./src/models/ml_classifiers/train_model.py
+program: ./src/models/ml_classifiers/train_model2.py
 method: bayes
 entity: thekatin
 project: master-thesis
@@ -7,7 +7,7 @@ metric:
   name: valid_score
 parameters:
   xgb.hyperparameters.num_round:
-    value: 50
+    value: 100
   xgb.hyperparameters.learning_rate:
     values: [0.05, 0.1, 0.2, 0.3]
   xgb.hyperparameters.max_depth:
@@ -20,10 +20,14 @@ parameters:
     values: [0.5, 1, 1.5, 2]
   xgb.hyperparameters.subsample:
     values: [1, 0.75, 0.5]
+  xgb.hyperparameters.colsample_bytree:
+    values: [1, 0.75, 0.5, 0.25]
   xgb.hyperparameters.dataset.name:
-    value: ogbn-products
+    value: ogbn-arxiv
+  xgb.hyperparameters.dataset.random_split:
+    value: False
 command:
   - ${env}
-  - python
+  - python3
   - ${program}
   - ${args_no_hyphens}

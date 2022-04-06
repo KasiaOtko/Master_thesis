@@ -12,7 +12,7 @@ class FFNNClassifier(nn.Module):
         self.num_features = num_features
         self.num_hidden1 = num_hidden1
         self.num_hidden2 = num_hidden2
-        self.num_hidden2 = num_hidden3
+        self.num_hidden3 = num_hidden3
         self.num_output = num_output
         self.dropout_p = dropout_p
         # input layer

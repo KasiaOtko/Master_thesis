@@ -55,7 +55,6 @@ logging.basicConfig(
 @hydra.main(config_path="../config", config_name="default_config.yaml")
 def Run_log_reg(config : DictConfig):
     
-    # print(f"configuration: \n {OmegaConf.to_yaml(config)}")
     hparams = config.log_reg.hyperparameters
     print(f"configuration: \n {OmegaConf.to_yaml(hparams)}")
     wandb.init(project="master-thesis", config = hparams, group = "log_reg")
@@ -68,6 +67,7 @@ def Run_log_reg(config : DictConfig):
 
     X_train, y_train, X_valid, y_valid, X_test, y_test = data_split(data,
                                                                     hparams["scale"],
+                                                                    to_numpy = True,
                                                                     random_split = hparams["random_split"],
                                                                     stratify = hparams["stratify"])
 
