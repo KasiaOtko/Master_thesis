@@ -3,7 +3,7 @@ hyperparameters:
   max_iter: 2000
   random_state: 0
   scale: True
-  stratify: True
-  random_split: True
   dataset:
-    name: ogbn-arxiv
+    name: EU_judgements
+    random_split: True
+    stratify: True

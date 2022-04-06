@@ -5,7 +5,7 @@ from sklearn.metrics import accuracy_score
 
 import wandb
 
-def data_split(data, scale = True, to_numpy = False, random_split = False, stratify = True, dataset = "ogbn", y = None):
+def data_split(data, dataset, scale = True, to_numpy = False, random_split = False, stratify = True):
     
     if dataset == "ogbn":
         data = data[0]

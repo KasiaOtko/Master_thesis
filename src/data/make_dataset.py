@@ -17,7 +17,7 @@ def load_data(dataset_name: str, root: str) -> torch_geometric.data.Data:
         dataset = PygNodePropPredDataset(name=dataset_name, root=root)
         return dataset
     else:
-        dataset = torch.load("/data/processed/EU_graph.pt")
+        dataset = torch.load(root + "/data/processed/EU_graph.pt")
         print(os.getcwd())
         # links = pd.read_csv(root + "/data/processed/eu_links_lang_gcc.csv", index_col = 0, parse_dates = [4, 10])
         # cases = pd.read_csv(root + "/data/processed/eu_cases_lang_gcc.csv", index_col = 0, parse_dates = [5, 6])

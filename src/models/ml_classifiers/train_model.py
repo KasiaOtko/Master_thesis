@@ -61,15 +61,19 @@ def Run_log_reg(config : DictConfig):
     orig_cwd = hydra.utils.get_original_cwd()
     logging.info("Configuration: {0}".format(hparams))
 
-    data = load_data(hparams.dataset.name, orig_cwd + config.root)
+    if "ogb" in hparams.dataset.name:
+        data = load_data(hparams.dataset.name, orig_cwd + config.root)
+    else:
+        data = load_data(hparams.dataset.name, orig_cwd)
     log_details_to_wandb("log_reg", hparams)
     logging.info("Data loaded.")
 
     X_train, y_train, X_valid, y_valid, X_test, y_test = data_split(data,
-                                                                    hparams["scale"],
+                                                                    dataset = hparams.dataset.name,
+                                                                    scale = hparams["scale"],
                                                                     to_numpy = True,
-                                                                    random_split = hparams["random_split"],
-                                                                    stratify = hparams["stratify"])
+                                                                    random_split = hparams.dataset.random_split,
+                                                                    stratify = hparams.dataset.stratify)
 
     C_range = hparams["C_range"]
     acc_table = pd.DataFrame(
@@ -115,21 +119,24 @@ def Run_log_reg(config : DictConfig):
 @hydra.main(config_path="../config", config_name="default_config.yaml")
 def train_Nnet(config):
 
-    # print(f"configuration: \n {OmegaConf.to_yaml(config)}")
     hparams = config.ffnn.hyperparameters
     print(f"configuration: \n {OmegaConf.to_yaml(hparams)}")
     wandb.init(project="master-thesis", config = hparams, group = "ffnn")
     orig_cwd = hydra.utils.get_original_cwd()
     logging.info("Configuration: {0}".format(hparams))
 
-    data = load_data(hparams.dataset.name, orig_cwd + config.root)
+    if "ogb" in hparams.dataset.name:
+        data = load_data(hparams.dataset.name, orig_cwd + config.root)
+    else:
+        data = load_data(hparams.dataset.name, orig_cwd)
     log_details_to_wandb("ffnn", hparams)
     logging.info("Data loaded.")
 
-    X_train, y_train, X_valid, y_valid, X_test, y_test = data_split(data, 
-                                                                    scale=hparams.dataset.scale, 
-                                                                    to_numpy=False, 
-                                                                    random_split=hparams.dataset.random_split, 
+    X_train, y_train, X_valid, y_valid, X_test, y_test = data_split(data,
+                                                                    dataset = hparams.dataset.name,
+                                                                    scale=hparams.dataset.scale,
+                                                                    to_numpy=False,
+                                                                    random_split=hparams.dataset.random_split,
                                                                     stratify=hparams.dataset.stratify)
 
     num_classes = len(np.unique(y_train))
@@ -217,9 +224,9 @@ def train_Nnet(config):
         wandb.log({"ffnn_train_loss": train_losses[-1].item(), "ffnn_train_acc": train_acc_cur, "ffnn_valid_acc": valid_acc_cur})
 
     # Evaluate final model on the test set
-    if ~hparams.dataset.random_split:
-        y_test, X_test = remove_outstanding_classes_from_testset(y_test, X_test)
-    num_batches_test = X_test.shape[0] // batch_size
+    # if ~hparams.dataset.random_split:
+    #     y_test, X_test = remove_outstanding_classes_from_testset(y_test, X_test)
+    # num_batches_test = X_test.shape[0] // batch_size
     test_targs, test_preds = [], []
     cur_loss = 0
     for i in range(num_batches_test):
@@ -309,7 +316,8 @@ def run_XGBoost(config):
     logging.info("Data loaded.")
 
     X_train, y_train, X_valid, y_valid, X_test, y_test = data_split(data,
-                                                                    hparams["scale"], 
+                                                                    dataset = hparams.dataset.name,
+                                                                    scale = hparams["scale"], 
                                                                     to_numpy=True, 
                                                                     random_split = True, 
                                                                     stratify = hparams.dataset.stratify)
