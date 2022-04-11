@@ -5,4 +5,5 @@ defaults:
     - rf: exp1
     - xgb: exp1
     - svm: exp1
+    - node2vec: exp1
 root: /data/raw

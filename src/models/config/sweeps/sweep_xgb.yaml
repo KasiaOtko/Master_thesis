@@ -11,7 +11,7 @@ parameters:
   xgb.hyperparameters.learning_rate:
     values: [0.05, 0.1, 0.2, 0.3]
   xgb.hyperparameters.max_depth:
-    values: [10, 15, 20, 25]
+    values: [5, 10, 15, 20]
   xgb.hyperparameters.eta:
     values: [0.05, 0.1, 0.2, 0.3]
   xgb.hyperparameters.gamma:
@@ -23,9 +23,9 @@ parameters:
   xgb.hyperparameters.colsample_bytree:
     values: [1, 0.75, 0.5, 0.25]
   xgb.hyperparameters.dataset.name:
-    value: ogbn-arxiv
+    value: ogbn-products
   xgb.hyperparameters.dataset.random_split:
-    value: False
+    value: True
 command:
   - ${env}
   - python3

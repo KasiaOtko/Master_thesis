@@ -5,9 +5,11 @@ from sklearn.metrics import accuracy_score
 
 import wandb
 
-def data_split(data, dataset, scale = True, to_numpy = False, random_split = False, stratify = True):
+def data_split(data, dataset, scale = False, to_numpy = False, random_split = False, stratify = False):
     
-    if dataset == "ogbn":
+    if "ogb" in dataset:
+
+        split_idx = data.get_idx_split()
         data = data[0]
         
         if random_split: # according to the i.i.d. assumption
@@ -19,8 +21,6 @@ def data_split(data, dataset, scale = True, to_numpy = False, random_split = Fal
                 X_train, X_valid, y_train, y_valid = train_test_split(X_train, y_train, test_size=0.25, random_state=0) # 0.25 x 0.8 = 0.2
 
         else: # Use the splits provided by OGB
-
-            split_idx = data.get_idx_split()
         
             for key, idx in split_idx.items():
                 mask = torch.zeros(data.num_nodes, dtype=torch.bool)
@@ -38,11 +38,11 @@ def data_split(data, dataset, scale = True, to_numpy = False, random_split = Fal
 
         # if random_split:
 
-        X_train = data.x[data["train_mask"]]    
+        X_train = data.x[data["train_mask"]].float()
         y_train = data.y[data["train_mask"]]
-        X_valid = data.x[data["valid_mask"]]
+        X_valid = data.x[data["valid_mask"]].float()
         y_valid = data.y[data["valid_mask"]]
-        X_test = data.x[data["test_mask"]]
+        X_test = data.x[data["test_mask"]].float()
         y_test = data.y[data["test_mask"]]
         
 

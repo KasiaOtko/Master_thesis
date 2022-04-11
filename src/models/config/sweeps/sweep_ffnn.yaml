@@ -6,22 +6,22 @@ metric:
   goal: maximize
   name: valid_score
 parameters:
-  ffnn.hyperparameters.num_hidden1:
+  ffnn.hyperparameters.num_hidden3:
     values: [1024, 1500, 2048]
   ffnn.hyperparameters.num_hidden2:
     values: [512, 1024]
-  ffnn.hyperparameters.num_hidden2:
+  ffnn.hyperparameters.num_hidden1:
     value: 512
   ffnn.hyperparameters.lr:
-    values: [0.0001, 0.001, 0.01, 0.1]
+    values: [0.0001, 0.001, 0.01]
   ffnn.hyperparameters.dropout_p:
-    values: [0, 0.1, 0.2, 0.3, 0.4]
+    values: [0.1, 0.2, 0.3, 0.4]
   ffnn.hyperparameters.batch_size:
     values: [200, 500, 1000, 1500]
   ffnn.hyperparameters.dataset.name:
-    value: ogbn-products
+    value: EU_judgements
   ffnn.hyperparameters.dataset.random_split:
-    value: False
+    value: True
 command:
   - ${env}
   - python3

@@ -3,11 +3,11 @@ hyperparameters:
   num_hidden2: 1024
   num_hidden3: 512
   dropout_p: 0.4
-  lr: 0.0001
+  lr: 0.001
   batch_size: 200
   epochs: 40
   dataset:
-    name: EU_judgements
+    name: ogbn-products
     stratify: False
     random_split: False
     scale: False
