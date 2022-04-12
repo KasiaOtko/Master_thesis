@@ -1,10 +1,15 @@
 import torch
+import torch.optim as optim
+import torch.nn as nn
+import numpy as np
+from sklearn.metrics import accuracy_score
 from torch_geometric.nn import Node2Vec
 from src.data.make_dataset import load_data
-from src.models.utils import data_split, log_details_to_wandb, prediction_scores
+from src.models.utils import pyg_data_split, data_split, log_details_to_wandb, prediction_scores
+from models.FFNN_model import FFNNClassifier
 import hydra
 import wandb
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import OmegaConf
 import multiprocessing
 import sys
 import logging
@@ -13,8 +18,6 @@ sys.path.append("..")
 n_cores = multiprocessing.cpu_count()
 
 logging.basicConfig(
-    filename="logs/ml_classifiers.txt",
-    filemode="a",
     level=logging.INFO,
     format="%(asctime)s %(levelname)-8s %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
@@ -22,12 +25,130 @@ logging.basicConfig(
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
+def eval_with_neural_net(data, z, hparams):
+
+    num_classes = len(np.unique(data.y))
+
+    model = FFNNClassifier(z.shape[1], hparams["num_hidden1"], hparams["num_hidden2"], hparams["num_hidden3"], num_classes, hparams["dropout_p"])
+
+    optimizer = optim.Adam(model.parameters(), lr=hparams["lr"], betas = (0.9, 0.999))
+    criterion = nn.CrossEntropyLoss()
+
+    X_train = z[data.train_mask]
+    y_train = data.y[data.train_mask].ravel()
+    X_valid = z[data.valid_mask]
+    y_valid = data.y[data.valid_mask].ravel()
+    X_test = z[data.test_mask]
+    y_test = data.y[data.test_mask].ravel()
+                                                                    
+
+    batch_size = hparams["batch_size"]
+    epochs = hparams["epochs"]
+    num_samples_train = X_train.shape[0]
+    num_batches_train = num_samples_train // batch_size
+    num_samples_valid = X_valid.shape[0]
+    num_batches_valid = num_samples_valid // batch_size
+    num_samples_test = X_test.shape[0]
+    num_batches_test = num_samples_test // batch_size
+
+    train_acc, train_loss = [], []
+    valid_acc, valid_loss = [], []
+    test_acc, test_loss = [], []
+    cur_loss = 0
+    train_losses = []
+    valid_losses = []
+
+    get_slice = lambda i, size: range(i * size, (i + 1) * size)
+
+    for epoch in range(epochs):
+        # Forward -> Backprob -> Update params
+        ## Train
+        cur_loss = 0
+        train_preds, train_targs = [], []
+        model.train()
+        for i in range(num_batches_train):  # iterate over each batch
+            optimizer.zero_grad()
+            slce = get_slice(i, batch_size) # get the batch
+            output = model(X_train[slce])     # forward pass
+            
+            # compute gradients given loss
+            y_batch = y_train[slce]
+            batch_loss = criterion(output, y_batch) # compute loss
+            batch_loss.backward()                        # backward pass
+            optimizer.step()                             # update parameters
+            
+            cur_loss += batch_loss
+            
+            # Make predictions (evaluate training)
+            preds = torch.max(output, 1)[1]
+            train_targs += list(y_train[slce].numpy())
+            train_preds += list(preds.data.numpy())
+
+        train_losses.append((cur_loss / num_batches_train).detach().numpy()) # average loss of all batches
+
+        model.eval()        
+        ### Evaluate validation
+        val_preds, val_targs = [], []
+        cur_loss = 0
+        for i in range(num_batches_valid):
+            slce = get_slice(i, batch_size)
+            
+            output = model(X_valid[slce])
+
+            y_batch = y_valid[slce]
+            batch_loss = criterion(output, y_batch)
+
+            preds = torch.max(output, 1)[1]
+            val_targs += list(y_valid[slce].numpy())
+            val_preds += list(preds.data.numpy())
+        
+            cur_loss += batch_loss
+        valid_losses.append((cur_loss / num_batches_valid).detach().numpy())
+
+        train_acc_cur = accuracy_score(train_targs, train_preds)
+        valid_acc_cur = accuracy_score(val_targs, val_preds)
+        
+        train_acc.append(train_acc_cur)
+        valid_acc.append(valid_acc_cur)
+        
+        # if epoch % 10 == 0:
+        logging.info("Epoch %2i : Train loss %f, Valid loss %f, Train acc %f, Valid acc %f" % (
+                    epoch+1, train_losses[-1], valid_losses[-1], train_acc_cur, valid_acc_cur))
+
+        wandb.log({"ffnn_train_loss": train_losses[-1].item(), "ffnn_train_acc": train_acc_cur, "ffnn_valid_acc": valid_acc_cur})
+
+    # Evaluate final model on the test set
+    # if ~hparams.dataset.random_split:
+    #     y_test, X_test = remove_outstanding_classes_from_testset(y_test, X_test)
+    # num_batches_test = X_test.shape[0] // batch_size
+    test_targs, test_preds = [], []
+    cur_loss = 0
+    for i in range(num_batches_test):
+        slce = get_slice(i, batch_size)
+        
+        output = model(X_test[slce])
+
+        y_batch = y_test[slce]
+        batch_loss = criterion(output, y_batch)
+        cur_loss += batch_loss
+
+        preds = torch.max(output, 1)[1]
+        test_targs += list(y_test[slce].numpy()) # 
+        test_preds += list(preds.data.numpy()) # 
+
+    test_acc = accuracy_score(test_targs, test_preds)
+    logging.info("Test set evaluation: Loss %f, Accuracy %f" % (cur_loss/num_batches_test, test_acc))
+    wandb.log({"Test accuracy": test_acc})
+    
+    wandb.log({"train_score": train_acc_cur, "valid_score": valid_acc_cur, "test_score": test_acc})
+
+
 @hydra.main(config_path="../config", config_name="default_config.yaml")
 def run_vode2vec(config):
 
-    hparams = config.ffnn.hyperparameters
+    hparams = config.node2vec.hyperparameters
     print(f"configuration: \n {OmegaConf.to_yaml(hparams)}")
-    #wandb.init(project="master-thesis", config = hparams, group = "node2vec")
+    wandb.init(project="master-thesis", config = hparams, group = "node2vec")
     orig_cwd = hydra.utils.get_original_cwd()
     logging.info("Configuration: {0}".format(hparams))
 
@@ -38,28 +159,22 @@ def run_vode2vec(config):
     log_details_to_wandb("node2vec", hparams)
     logging.info("Data loaded.")
 
-    X_train, y_train, X_valid, y_valid, X_test, y_test = data_split(data,
-                                                                    dataset = hparams.dataset.name,
-                                                                    scale = hparams["scale"],
-                                                                    to_numpy = True,
-                                                                    random_split = hparams.dataset.random_split,
-                                                                    stratify = hparams.dataset.stratify)
-    model = Node2Vec(data.edge_index, embedding_dim=64, 
-                 walk_length=20,                        # lenght of rw
-                 context_size=10, walks_per_node=20,
-                 num_negative_samples=1, 
-                 p=500, q=0.5,                             # bias parameters
+    data = pyg_data_split(data, hparams.dataset.name)
+
+    model = Node2Vec(data.edge_index, embedding_dim=hparams["embedding_dim"], 
+                 walk_length=hparams["walk_length"],                        # lenght of rw
+                 context_size=hparams["context_size"], walks_per_node=hparams["walks_per_node"],
+                 num_negative_samples=hparams["num_negative_samples"], 
+                 p=hparams["p"], q=hparams["q"],                             # bias parameters
                  sparse=True).to(device)
 
-    loader = model.loader(batch_size=128, # we generate 128*20 random walks in every batch
-                      shuffle=True, num_workers=4)
+    loader = model.loader(batch_size=hparams["batch_size"], # we generate 128*20 random walks in every batch
+                      shuffle=True, num_workers=n_cores)
 
-    optimizer = torch.optim.SparseAdam(list(model.parameters()), lr=0.01)
+    optimizer = torch.optim.SparseAdam(list(model.parameters()), lr=hparams["lr"])
 
-    batch_size = hparams["batch_size"]
     epochs = hparams["epochs"]
     train_losses = []
-    train_acc, valid_acc = []
 
     model.train()
     for epoch in range(epochs):
@@ -75,20 +190,27 @@ def run_vode2vec(config):
 
         model.eval()
         z = model() # computes embeddings of the model [N, embedding_dim]
-        train_score = model.test(z[data.train_mask], data.y[data.train_mask],
-                        z[data.train_mask], data.y[data.train_mask],
+
+        net_hparams = config.ffnn.hyperparameters
+
+        train_score = model.test(z[data.train_mask], data.y[data.train_mask].ravel(),
+                        z[data.train_mask], data.y[data.train_mask].ravel(),
                         max_iter=150)
 
-        valid_score = model.test(z[data.train_mask], data.y[data.train_mask],
-                        z[data.valid_mask], data.y[data.valid_mask],
+        valid_score = model.test(z[data.train_mask], data.y[data.train_mask].ravel(),
+                        z[data.valid_mask], data.y[data.valid_mask].ravel(),
                         max_iter=150) # in the test function, logistic regression is implemented to test the embeddings
 
         logging.info("Epoch %2i : Train loss %f, Train Accuracy %f, Validation Accuracy %f" % (
                     epoch+1, train_losses[-1], train_score, valid_score))
 
-        #wandb.log({"train_loss": train_losses[-1], "train_score": train_score, "valid_score": valid_score})
+        wandb.log({"train_loss": train_losses[-1], "train_score": train_score, "valid_score": valid_score})
     
-    test_score = model.test(z[data.train_mask], data.y[data.train_mask],
-                        z[data.test_mask], data.y[data.test_mask],
+    test_score = model.test(z[data.train_mask], data.y[data.train_mask].ravel(),
+                        z[data.test_mask], data.y[data.test_mask].ravel(),
                         max_iter=150)
-    #wandb.log({"test_score": test_score})
+    wandb.log({"test_score": test_score})
+
+if __name__ == "__main__":
+    
+    run_vode2vec()

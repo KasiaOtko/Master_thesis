@@ -5,6 +5,25 @@ from sklearn.metrics import accuracy_score
 
 import wandb
 
+def pyg_data_split(data, dataset):
+
+    if "ogb" in dataset:
+    
+        split_idx = data.get_idx_split()
+        data = data[0]
+
+        for key, idx in split_idx.items():
+                mask = torch.zeros(data.num_nodes, dtype=torch.bool)
+                mask[idx] = True
+                data[f"{key}_mask"] = mask
+    
+    else:
+
+        data = data[0]
+
+    return data
+
+
 def data_split(data, dataset, scale = False, to_numpy = False, random_split = False, stratify = False):
     
     if "ogb" in dataset:

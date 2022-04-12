@@ -220,10 +220,10 @@ def classify(config):
     y = sentences.Category_encoded.values
 
     X_train, y_train, X_valid, y_valid, X_test, y_test = data_split((X, y),
-                                                                    hparams["scale"],
+                                                                    dataset = hparams.dataset.name,
+                                                                    scale = hparams["scale"],
                                                                     random_split = hparams["random_split"],
-                                                                    stratify = hparams["stratify"],
-                                                                    dataset = "EU_judgements")
+                                                                    stratify = hparams["stratify"])
 
 
 
