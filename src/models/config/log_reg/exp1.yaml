@@ -6,4 +6,4 @@ hyperparameters:
   dataset:
     name: EU_judgements
     random_split: True
-    stratify: True
+    stratify: False

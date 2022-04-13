@@ -16,7 +16,6 @@ from sklearn.model_selection import RandomizedSearchCV
 from sklearn.metrics import accuracy_score
 from sklearnex import patch_sklearn 
 
-
 from omegaconf import DictConfig, OmegaConf
 
 import wandb
@@ -71,7 +70,7 @@ def Run_log_reg(config : DictConfig):
     X_train, y_train, X_valid, y_valid, X_test, y_test = data_split(data,
                                                                     dataset = hparams.dataset.name,
                                                                     scale = hparams["scale"],
-                                                                    to_numpy = True,
+                                                                    to_numpy = False,
                                                                     random_split = hparams.dataset.random_split,
                                                                     stratify = hparams.dataset.stratify)
 
@@ -111,9 +110,6 @@ def Run_log_reg(config : DictConfig):
     train_score, valid_score, test_score = prediction_scores(lr, X_train, y_train, X_valid, y_valid, X_test, y_test)
     wandb.log({"train_score": train_score, "valid_score": valid_score, "test_score": test_score})
     logging.info("Train score %f, Validation score %f, Test score %f" % (train_score, valid_score, test_score))
-    # y_test_pred = lr.predict(X_test)
-    # test_accuracy = accuracy_score(y_test, y_test_pred)
-    # wandb.log({"Test accuracy": test_accuracy})
 
 
 @hydra.main(config_path="../config", config_name="default_config.yaml")
@@ -138,6 +134,13 @@ def train_Nnet(config):
                                                                     to_numpy=False,
                                                                     random_split=hparams.dataset.random_split,
                                                                     stratify=hparams.dataset.stratify)
+    if "EU" in hparams.dataset.name:
+        X_train = torch.from_numpy(X_train).float()
+        X_valid = torch.from_numpy(X_valid).float()
+        X_test = torch.from_numpy(X_test).float()
+        y_train = torch.from_numpy(y_train).long()
+        y_valid = torch.from_numpy(y_valid).long()
+        y_test = torch.from_numpy(y_test).long()
 
     num_classes = len(np.unique(y_train))
 
@@ -311,18 +314,19 @@ def run_XGBoost(config):
     orig_cwd = hydra.utils.get_original_cwd()
     logging.info("Configuration: {0}".format(config["xgb"]["hyperparameters"]))
 
-    data = load_data(hparams.dataset.name, orig_cwd + "/data/raw")
+    if "ogb" in hparams.dataset.name:
+        data = load_data(hparams.dataset.name, orig_cwd + config.root)
+    else:
+        data = load_data(hparams.dataset.name, orig_cwd)
     wandb.log({"dataset": hparams.dataset.name})
     logging.info("Data loaded.")
 
     X_train, y_train, X_valid, y_valid, X_test, y_test = data_split(data,
                                                                     dataset = hparams.dataset.name,
                                                                     scale = hparams["scale"], 
-                                                                    to_numpy=True, 
+                                                                    to_numpy=False, 
                                                                     random_split = True, 
                                                                     stratify = hparams.dataset.stratify)
-
-    # X_train, y_train, X_valid, y_valid, X_test, y_test = X_train[:100], y_train[:100], X_valid[:100], y_valid[:100], X_test[:100], y_test[:100]
 
     xgb.config_context(verbosity = 3)
     evalset = [(X_train, y_train), (X_valid, y_valid)]
@@ -332,7 +336,7 @@ def run_XGBoost(config):
                               min_child_weight  = hparams["min_child_weight"],
                               subsample = hparams["subsample"], colsample_bytree = hparams["colsample_bytree"])
 
-    model.fit(X_train, y_train, early_stopping_rounds=5, eval_metric=['mlogloss', 'merror'], eval_set=evalset, verbose = True)
+    model.fit(X_train, y_train, early_stopping_rounds=10, eval_metric=['mlogloss', 'merror'], eval_set=evalset, verbose = True)
 
     results = model.evals_result()
 
@@ -389,4 +393,4 @@ def run_SVM(config):
 
 if __name__ == "__main__":
 
-    train_Nnet()
+    run_XGBoost()

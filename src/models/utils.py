@@ -57,20 +57,20 @@ def data_split(data, dataset, scale = False, to_numpy = False, random_split = Fa
 
         # if random_split:
 
-        X_train = data.x[data["train_mask"]].float()
-        y_train = data.y[data["train_mask"]]
-        X_valid = data.x[data["valid_mask"]].float()
-        y_valid = data.y[data["valid_mask"]]
-        X_test = data.x[data["test_mask"]].float()
-        y_test = data.y[data["test_mask"]]
+        # X_train = data.x[data["train_mask"]].float()
+        # y_train = data.y[data["train_mask"]]
+        # X_valid = data.x[data["valid_mask"]].float()
+        # y_valid = data.y[data["valid_mask"]]
+        # X_test = data.x[data["test_mask"]].float()
+        # y_test = data.y[data["test_mask"]]
         
 
-            # if stratify:
-                # X_train, X_test, y_train, y_test = train_test_split(data[0], data[1], test_size=0.2, random_state=0, stratify = data[1])
-                # X_train, X_valid, y_train, y_valid = train_test_split(X_train, y_train, test_size=0.25, random_state=0, stratify = y_train) # 0.25 x 0.8 = 0.2
-            # else:
-                # X_train, X_test, y_train, y_test = train_test_split(data[0], data[1], test_size=0.2, random_state=0)
-                # X_train, X_valid, y_train, y_valid = train_test_split(X_train, y_train, test_size=0.25, random_state=0) # 0.25 x 0.8 = 0.2
+            if stratify:
+                X_train, X_test, y_train, y_test = train_test_split(data[0], data[1], test_size=0.2, random_state=0, stratify = data[1])
+                X_train, X_valid, y_train, y_valid = train_test_split(X_train, y_train, test_size=0.25, random_state=0, stratify = y_train) # 0.25 x 0.8 = 0.2
+            else:
+                X_train, X_test, y_train, y_test = train_test_split(data[0], data[1], test_size=0.2, random_state=0)
+                X_train, X_valid, y_train, y_valid = train_test_split(X_train, y_train, test_size=0.25, random_state=0) # 0.25 x 0.8 = 0.2
 
     if scale:
             x_mean, x_std = X_train.mean(), X_train.std()
@@ -86,10 +86,10 @@ def data_split(data, dataset, scale = False, to_numpy = False, random_split = Fa
         X_test = X_test.numpy()
         y_test = y_test.numpy().ravel()
 
-    else:
-        y_train = y_train.long().reshape(-1)
-        y_valid = y_valid.long().reshape(-1)
-        y_test = y_test.long().reshape(-1)
+    # else:
+    #     y_train = y_train.long().reshape(-1)
+    #     y_valid = y_valid.long().reshape(-1)
+    #     y_test = y_test.long().reshape(-1)
 
     return X_train, y_train, X_valid, y_valid, X_test, y_test
 

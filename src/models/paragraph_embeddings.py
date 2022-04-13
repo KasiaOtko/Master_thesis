@@ -116,7 +116,7 @@ def train_NNet(X_train, y_train, X_valid, y_valid, X_test, y_test, hparams):
         valid_acc.append(valid_acc_cur)
         
         # if epoch % 10 == 0:
-        logging.info("Epoch %2i : Train loss %f, Valid loss %f, Train acc %f, Valid acc %f" % (
+        logging.info("Epoch %2i: Train loss %f, Valid loss %f, Train acc %f, Valid acc %f" % (
                     epoch+1, train_losses[-1], valid_losses[-1], train_acc_cur, valid_acc_cur))
 
         wandb.log({"ffnn_train_loss": train_losses[-1].item(), "ffnn_train_acc": train_acc_cur, "ffnn_valid_acc": valid_acc_cur})
@@ -213,6 +213,8 @@ def classify(config):
     links, cases = load_data(hparams.dataset.name, orig_cwd)
 
     sentences = prepare_sentences(links, cases)
+
+    y = sentences.Category_encoded.values
 
     X = generate_embeddings(sentences, hparams)
     logging.info("Embeddings generated.")

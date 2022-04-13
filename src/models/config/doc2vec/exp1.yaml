@@ -3,7 +3,7 @@ hyperparameters:
   vector_size: 50
   window: 5
   min_count: 2
-  epochs: 40
+  epochs: 50
   common_params:
     negative: 5
     hs: 0
