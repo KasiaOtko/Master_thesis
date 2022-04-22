@@ -1,0 +1,9 @@
+hyperparameers:
+  hidden_channels: 24
+  dropout: 0.2
+  epochs: 5
+  lr: 0.0001
+  dataset:
+    name: EU_judgements
+    random_split: True
+    scale: False

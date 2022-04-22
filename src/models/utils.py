@@ -1,27 +1,81 @@
 import torch
 import numpy as np
+import random
+import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
 import wandb
 
-def pyg_data_split(data, dataset):
+def pyg_random_split(data, train_ratio = 0.8, valid_ratio = 0.25):
+
+    train_ratio = train_ratio
+    valid_ratio = valid_ratio
+    num_nodes = data.x.shape[0]
+    num_train = int(num_nodes * train_ratio)
+    num_valid = int(num_nodes * train_ratio * valid_ratio)
+    idx = [i for i in range(num_nodes)]
+
+    np.random.shuffle(idx)
+
+    train_mask = torch.full_like(data.y, False, dtype=bool)
+    train_mask[idx[:num_train-num_valid]] = True
+
+    valid_mask = torch.full_like(data.y, False, dtype=bool)
+    valid_mask[idx[num_train-num_valid:num_train]] = True
+
+    test_mask = torch.full_like(data.y, False, dtype=bool)
+    test_mask[idx[num_train:]] = True
+
+    assert torch.sum(train_mask) + torch.sum(valid_mask) + torch.sum(test_mask) == num_nodes, "Wrong proprtions of split."
+    assert len(set(train_mask.nonzero()).intersection(valid_mask.nonzero())) == 0, "Wrong train-valid split."
+    assert len(set(train_mask.nonzero()).intersection(test_mask.nonzero())) == 0, "Wrong train-test split."
+    assert len(set(valid_mask.nonzero()).intersection(test_mask.nonzero())) == 0, "Wrong valid-test split."
+
+    data.train_mask = train_mask.reshape(-1)
+    data.valid_mask = valid_mask.reshape(-1)
+    data.test_mask = test_mask.reshape(-1)
+
+    return data
+
+def pyg_data_split(data, dataset, random_split):
 
     if "ogb" in dataset:
     
         split_idx = data.get_idx_split()
         data = data[0]
+    
+        if random_split:
+            if "products" in dataset:
+                data = pyg_random_split(data, 0.4, 0.25)
+            elif "arxiv" in dataset:
+                data = pyg_random_split(data, 0.71, 0.24)
 
-        for key, idx in split_idx.items():
+        else:
+            for key, idx in split_idx.items():
                 mask = torch.zeros(data.num_nodes, dtype=torch.bool)
                 mask[idx] = True
                 data[f"{key}_mask"] = mask
     
     else:
 
-        data = data[0]
+        if random_split:
+            data = pyg_random_split(data)
 
     return data
+
+
+def eval_classifier(test_targs, test_preds):
+    
+    test_acc = accuracy_score(test_targs, test_preds)
+    test_f1_weighted = f1_score(test_targs, test_preds, average = 'weighted')
+    test_f1_macro = f1_score(test_targs, test_preds, average = 'macro')
+    test_recall_weighted = recall_score(test_targs, test_preds, average = 'weighted')
+    test_recall_macro = recall_score(test_targs, test_preds, average = 'macro')
+    test_prec_weighted = precision_score(test_targs, test_preds, average = 'weighted')
+    test_prec_macro = precision_score(test_targs, test_preds, average = 'macro')
+
+    return test_acc, (test_f1_weighted, test_f1_macro), (test_recall_weighted, test_recall_macro), (test_prec_weighted, test_prec_macro)
 
 
 def data_split(data, dataset, scale = False, to_numpy = False, random_split = False, stratify = False):
@@ -124,3 +178,20 @@ def remove_outstanding_classes_from_testset(y_test, X_test):
     mask_idx = mask.reshape(-1).nonzero()[0].reshape(-1)
  
     return y_test[mask_idx], X_test[mask_idx, :]# , y_pred[mask_idx]
+
+
+def draw_learning_curve(epochs, train_losses, valid_losses, metric, root):
+
+    fig = plt.figure(figsize=(8, 5))
+    plt.plot(range(epochs), train_losses, 'r', range(epochs), valid_losses, 'b')
+    plt.legend(['Train {}'.format(metric),'Validation {}'.format(metric)])
+    plt.xlabel('Epochs'), plt.ylabel(f"{metric}");
+    plt.savefig(f"{root}/reports/figures/FFNN_{metric}_curve.png")
+    wandb.log({f"{metric}_curve": wandb.Image(fig)})
+
+    # fig = plt.figure(figsize=(8, 5))
+    # plt.plot(range(epochs), train_losses, 'r', range(epochs), valid_losses, 'b')
+    # plt.legend(['Train {}'.format(metric), 'Validation {}'.format(metric)])
+    # plt.xlabel('Epochs'), plt.ylabel('Loss');
+    # plt.savefig(f"{orig_cwd}/reports/figures/FFNN_{metric}_curve.png")
+    # wandb.log({"loss_curve": wandb.Image(fig)})

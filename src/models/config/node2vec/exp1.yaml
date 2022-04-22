@@ -1,15 +1,16 @@
 hyperparameters:
-  embedding_dim: 64
+  embedding_dim: 256
   walk_length: 20
-  context_size: 5
-  walks_per_node: 5
+  context_size: 10
+  walks_per_node: 10
   num_negative_samples: 1
-  p: 500
-  q: 1
-  batch_size: 1000
-  epochs: 1
+  p: 1.5
+  q: 0.5
+  batch_size: 700
+  epochs: 500
   lr: 0.001
+  inference: True
   dataset:
-    name: ogbn-arxiv
-    random_split: False
+    name: ogbn-products
+    random_split: True
     stratify: False 

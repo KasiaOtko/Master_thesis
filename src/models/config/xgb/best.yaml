@@ -10,7 +10,6 @@ hyperparameters:
   objective: multi:softmax
   tree_method: hist
   scale: False
-  inference: True
   dataset:
     name: EU_judgements
     stratify: False

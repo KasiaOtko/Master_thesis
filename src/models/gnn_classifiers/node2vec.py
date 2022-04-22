@@ -1,3 +1,4 @@
+from cgi import test
 import torch
 import torch.optim as optim
 import torch.nn as nn
@@ -5,7 +6,7 @@ import numpy as np
 from sklearn.metrics import accuracy_score
 from torch_geometric.nn import Node2Vec
 from src.data.make_dataset import load_data
-from src.models.utils import pyg_data_split, data_split, log_details_to_wandb, prediction_scores
+from src.models.utils import pyg_data_split, data_split, log_details_to_wandb, draw_learning_curve
 from models.FFNN_model import FFNNClassifier
 import hydra
 import wandb
@@ -13,6 +14,7 @@ from omegaconf import OmegaConf
 import multiprocessing
 import sys
 import logging
+import csv
 
 sys.path.append("..")
 n_cores = multiprocessing.cpu_count()
@@ -25,20 +27,28 @@ logging.basicConfig(
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-def eval_with_neural_net(data, z, hparams):
+def eval_with_neural_net(data, z, hparams, orig_cwd):
 
     num_classes = len(np.unique(data.y))
 
-    model = FFNNClassifier(z.shape[1], hparams["num_hidden1"], hparams["num_hidden2"], hparams["num_hidden3"], num_classes, hparams["dropout_p"])
+    model = FFNNClassifier(z.shape[1], 
+                            hparams["num_hidden1"], 
+                            hparams["num_hidden2"], 
+                            hparams["num_hidden3"], 
+                            num_classes, 
+                            hparams["dropout_p"])
 
     optimizer = optim.Adam(model.parameters(), lr=hparams["lr"], betas = (0.9, 0.999))
     criterion = nn.CrossEntropyLoss()
 
-    X_train = z[data.train_mask]
+    z = z.detach().numpy()
+
+    X_train = torch.from_numpy(z[data.train_mask]).float()
+    print("Is cuda?", X_train.is_cuda)
     y_train = data.y[data.train_mask].ravel()
-    X_valid = z[data.valid_mask]
+    X_valid = torch.from_numpy(z[data.valid_mask]).float()
     y_valid = data.y[data.valid_mask].ravel()
-    X_test = z[data.test_mask]
+    X_test = torch.from_numpy(z[data.test_mask]).float()
     y_test = data.y[data.test_mask].ravel()
                                                                     
 
@@ -123,24 +133,28 @@ def eval_with_neural_net(data, z, hparams):
     # num_batches_test = X_test.shape[0] // batch_size
     test_targs, test_preds = [], []
     cur_loss = 0
-    for i in range(num_batches_test):
-        slce = get_slice(i, batch_size)
-        
-        output = model(X_test[slce])
+    with torch.no_grad():
+        for i in range(num_batches_test):
+            slce = get_slice(i, batch_size)
+            
+            output = model(X_test[slce])
 
-        y_batch = y_test[slce]
-        batch_loss = criterion(output, y_batch)
-        cur_loss += batch_loss
+            y_batch = y_test[slce]
+            batch_loss = criterion(output, y_batch)
+            cur_loss += batch_loss
 
-        preds = torch.max(output, 1)[1]
-        test_targs += list(y_test[slce].numpy()) # 
-        test_preds += list(preds.data.numpy()) # 
+            preds = torch.max(output, 1)[1]
+            test_targs += list(y_test[slce].numpy()) # 
+            test_preds += list(preds.data.numpy()) # 
 
     test_acc = accuracy_score(test_targs, test_preds)
     logging.info("Test set evaluation: Loss %f, Accuracy %f" % (cur_loss/num_batches_test, test_acc))
-    wandb.log({"Test accuracy": test_acc})
-    
     wandb.log({"train_score": train_acc_cur, "valid_score": valid_acc_cur, "test_score": test_acc})
+
+    draw_learning_curve(epochs, train_losses, valid_losses, "Loss", orig_cwd)
+    draw_learning_curve(epochs, train_acc, valid_acc, "Accuracy", orig_cwd)
+
+    return train_acc[-1], valid_acc[-1], test_acc
 
 
 @hydra.main(config_path="../config", config_name="default_config.yaml")
@@ -159,58 +173,92 @@ def run_vode2vec(config):
     log_details_to_wandb("node2vec", hparams)
     logging.info("Data loaded.")
 
-    data = pyg_data_split(data, hparams.dataset.name)
+    data = pyg_data_split(data, hparams.dataset.name, hparams.dataset.random_split)
 
-    model = Node2Vec(data.edge_index, embedding_dim=hparams["embedding_dim"], 
-                 walk_length=hparams["walk_length"],                        # lenght of rw
-                 context_size=hparams["context_size"], walks_per_node=hparams["walks_per_node"],
-                 num_negative_samples=hparams["num_negative_samples"], 
-                 p=hparams["p"], q=hparams["q"],                             # bias parameters
-                 sparse=True).to(device)
+    if hparams.inference:
+        if "ogb" in hparams.dataset.name:
+            data = load_data(hparams.dataset.name, orig_cwd + config.root)
+        else:
+            data = load_data(hparams.dataset.name, orig_cwd)
+        # s = torch.load(orig_cwd + "/models/node2vec_ogbn-products.pt", map_location=device)
+        model = Node2Vec(data.edge_index, embedding_dim=hparams["embedding_dim"], 
+                    walk_length=hparams["walk_length"],                        # lenght of rw
+                    context_size=hparams["context_size"], walks_per_node=hparams["walks_per_node"],
+                    num_negative_samples=hparams["num_negative_samples"], 
+                    p=hparams["p"], q=hparams["q"],                             # bias parameters
+                    sparse=True).to(device)
 
-    loader = model.loader(batch_size=hparams["batch_size"], # we generate 128*20 random walks in every batch
-                      shuffle=True, num_workers=n_cores)
-
-    optimizer = torch.optim.SparseAdam(list(model.parameters()), lr=hparams["lr"])
-
-    epochs = hparams["epochs"]
-    train_losses = []
-
-    model.train()
-    for epoch in range(epochs):
-        total_loss = 0
-        for pos_rw, neg_rw in loader:
-            optimizer.zero_grad()
-            loss = model.loss(pos_rw.to(device), neg_rw.to(device)) # compute loss using positive and negative random walks
-            loss.backward()
-            optimizer.step()
-            total_loss += loss.item()
-
-        train_losses.append(total_loss / len(loader))
-
+        model.load_state_dict(torch.load(orig_cwd + "/models/node2vec_ogbn-products.pt", map_location=device))
         model.eval()
-        z = model() # computes embeddings of the model [N, embedding_dim]
 
+        z = model()
         net_hparams = config.ffnn.hyperparameters
+        train_score, valid_score, test_score = eval_with_neural_net(data, z, net_hparams, orig_cwd)
+        wandb.log({"train_score": train_score, "valid_score": valid_score, "test_score": test_score})
 
-        train_score = model.test(z[data.train_mask], data.y[data.train_mask].ravel(),
-                        z[data.train_mask], data.y[data.train_mask].ravel(),
-                        max_iter=150)
-
-        valid_score = model.test(z[data.train_mask], data.y[data.train_mask].ravel(),
-                        z[data.valid_mask], data.y[data.valid_mask].ravel(),
-                        max_iter=150) # in the test function, logistic regression is implemented to test the embeddings
-
-        logging.info("Epoch %2i : Train loss %f, Train Accuracy %f, Validation Accuracy %f" % (
-                    epoch+1, train_losses[-1], train_score, valid_score))
-
-        wandb.log({"train_loss": train_losses[-1], "train_score": train_score, "valid_score": valid_score})
+        data = ["n2v", hparams.dataset.name, hparams.dataset.random_split, train_score, valid_score, test_score]
+        with open(orig_cwd + '/logs/n2v_{}.csv'.format(hparams.dataset.name), 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(data)
     
-    test_score = model.test(z[data.train_mask], data.y[data.train_mask].ravel(),
-                        z[data.test_mask], data.y[data.test_mask].ravel(),
-                        max_iter=150)
-    wandb.log({"test_score": test_score})
+    else:
+        
+        model = Node2Vec(data.edge_index, embedding_dim=hparams["embedding_dim"], 
+                    walk_length=hparams["walk_length"],                        # lenght of rw
+                    context_size=hparams["context_size"], walks_per_node=hparams["walks_per_node"],
+                    num_negative_samples=hparams["num_negative_samples"], 
+                    p=hparams["p"], q=hparams["q"],                             # bias parameters
+                    sparse=True).to(device)
+
+        loader = model.loader(batch_size=hparams["batch_size"], # we generate 128*20 random walks in every batch
+                        shuffle=True, num_workers=n_cores)
+
+        optimizer = torch.optim.SparseAdam(list(model.parameters()), lr=hparams["lr"])
+
+        epochs = hparams["epochs"]
+        train_losses = []
+
+        model.train()
+        for epoch in range(epochs):
+            total_loss = 0
+            for pos_rw, neg_rw in loader:
+                optimizer.zero_grad()
+                loss = model.loss(pos_rw.to(device), neg_rw.to(device)) # compute loss using positive and negative random walks
+                loss.backward()
+                optimizer.step()
+                total_loss += loss.item()
+
+            train_losses.append(total_loss / len(loader))
+
+            if epochs+1 % 100 == 0:
+                model.eval()
+                z = model() # computes embeddings of the model [N, embedding_dim]
+                train_score = model.test(z[data.train_mask], data.y[data.train_mask].ravel(),
+                                z[data.train_mask], data.y[data.train_mask].ravel(),
+                                max_iter=150)
+
+                valid_score = model.test(z[data.train_mask], data.y[data.train_mask].ravel(),
+                                z[data.valid_mask], data.y[data.valid_mask].ravel(),
+                                max_iter=150) # in the test function, logistic regression is implemented to test the embeddings
+
+                logging.info("Epoch %2i : Train loss %f, Train Accuracy %f, Validation Accuracy %f" % (
+                            epoch+1, train_losses[-1], train_score, valid_score))
+
+                wandb.log({"train_loss": train_losses[-1], "train_score": train_score, "valid_score": valid_score})
+        
+        # test_score = model.test(z[data.train_mask], data.y[data.train_mask].ravel(),
+        #                     z[data.test_mask], data.y[data.test_mask].ravel(),
+        #                     max_iter=150)
+        torch.save(model.state_dict(), orig_cwd + "/models/node2vec_{}.pt".format(hparams.dataset.name))
+        net_hparams = config.ffnn.hyperparameters
+        train_score, valid_score, test_score = eval_with_neural_net(data, z, net_hparams, orig_cwd)
+        wandb.log({"train_score": train_score, "valid_score": valid_score, "test_score": test_score})
+    
 
 if __name__ == "__main__":
     
     run_vode2vec()
+    # data = ["n2v", "ogbn-products", True, 0.5, 0.55, 0.6]
+    # with open('logs/n2v_{}.csv'.format("ogbn-products"), 'a', newline='') as f:
+    #     writer = csv.writer(f)
+    #     writer.writerow(data)

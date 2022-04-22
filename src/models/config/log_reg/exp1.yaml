@@ -1,9 +1,10 @@
 hyperparameters:
-  C_range: [0.01,0.1,10,100,1000]
-  max_iter: 2000
+  C_range: 100 #[0.01,0.1,10,100,1000]
+  max_iter: 5000
   random_state: 0
   scale: True
+  inference: True
   dataset:
-    name: EU_judgements
+    name: ogbn-products
     random_split: True
     stratify: False
