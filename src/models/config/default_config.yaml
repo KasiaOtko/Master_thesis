@@ -7,4 +7,5 @@ defaults:
     - svm: exp1
     - node2vec: exp1
     - gcn: exp1
+    - gat: exp1
 root: /data/raw

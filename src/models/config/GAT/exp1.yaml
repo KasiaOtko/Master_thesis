@@ -6,8 +6,8 @@ hyperparameters:
   scheduler_step_size: 100
   scheduler_gamma: 0.1
   num_bases: 10
-  num_layers: 2
+  heads: 2
   dataset:
-    name: EU_judgements #ogbn-arxiv
+    name: EU_judgements
     random_split: True
     scale: False

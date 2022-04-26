@@ -174,7 +174,7 @@ def run_vode2vec(config):
     logging.info("Data loaded.")
 
     data = pyg_data_split(data, hparams.dataset.name, hparams.dataset.random_split)
-
+    print("Tran nodes:", data.train_mask.sum())
     if hparams.inference:
         if "ogb" in hparams.dataset.name:
             data = load_data(hparams.dataset.name, orig_cwd + config.root)
