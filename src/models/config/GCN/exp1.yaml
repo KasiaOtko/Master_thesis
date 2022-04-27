@@ -1,12 +1,16 @@
 hyperparameters:
   hidden_channels: 50
   dropout_p: 0.1
-  epochs: 200
+  epochs: 2
   lr: 0.01
   scheduler_step_size: 100
   scheduler_gamma: 0.1
   num_bases: 10
   num_layers: 2
+  mini_batch: True
+  batch_size: 1024
+  model: "gat"
+  heads: 2
   dataset:
     name: EU_judgements #ogbn-arxiv
     random_split: True

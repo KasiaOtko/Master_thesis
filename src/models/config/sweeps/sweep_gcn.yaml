@@ -1,0 +1,31 @@
+program: ./src/models/ml_classifiers/train_model3.py
+method: bayes
+entity: thekatin
+project: master-thesis
+metric:
+  goal: maximize
+  name: valid_score
+parameters:
+  gcn.hyperparameters.hidden_channels:
+    values: [64, 128, 256]
+  gcn.hyperparameters.dropout_p:
+    values: [0.1, 0.2, 0.3]
+  gcn.hyperparameters.lr:
+    values: [0.1, 0.01, 0.001]
+  gcn.hyperparameters.num_bases:
+    values: [0, 10, 20, 30, 40]
+  gcn.hyperparameters.num_layers:
+    values: [2, 3, 4, 5]
+  gcn.hyperparameters.scheduler_step_size:
+    values: [50, 100, 150]
+  gcn.hyperparameters.scheduler_gamma:
+    values: [0.1, 0.3, 0.5]
+  gcn.hyperparameters.dataset.name:
+    value: EU_judgements
+  gcn.hyperparameters.dataset.random_split:
+    value: True
+command:
+  - ${env}
+  - python3
+  - ${program}
+  - ${args_no_hyphens}

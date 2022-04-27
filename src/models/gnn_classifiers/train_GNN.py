@@ -8,7 +8,7 @@ import numpy as np
 import logging
 from ogb.nodeproppred import Evaluator
 from GCN_model import GCN, RGCN
-from torch_geometric.loader import NeighborSampler, ClusterData, ClusterLoader
+from torch_geometric.loader import NeighborSampler, NeighborLoader, ClusterData, ClusterLoader
 from GAT_model import GAT, RGAT
 
 from omegaconf import OmegaConf
@@ -41,34 +41,54 @@ def train(data, model, optimizer, scheduler, criterion, hparams):
 
     return loss
 
-def train_mini_batch(train_loader, model, optimizer, scheduler, criterion, device):
+def train_mini_batch(train_loader, model, optimizer, scheduler, criterion, device, hparams):
     model.train()
+    
+    total_examples = total_loss = total_correct =  0
+    # y_pred = torch.Tensor()
+    if "ogb" in hparams.dataset.name:
+        for batch in train_loader:
+            optimizer.zero_grad()
+            batch = batch.to(device)
+            batch_size = batch.batch_size
+            out = model(batch.x, batch.edge_index)[:batch_size]
+            y = batch.y[:batch_size]
+            loss = criterion(out, y)
+            loss.backward()
+            optimizer.step()
+            scheduler.step()
 
-    total_loss = total_examples = 0
-    total_correct = 0
-    for batch in train_loader:
-        batch = batch.to(device)
-        out = model(batch.x, batch.edge_index)
-        y = batch.y[batch.train_mask].reshape(-1)
-        loss = criterion(out[batch.train_mask], y)
-        loss.backward()
-        optimizer.step()
-        scheduler.step()
-        optimizer.zero_grad()
-        num_examples = batch.train_mask.sum().item()
-        total_loss += loss.item() * num_examples
-        total_examples += num_examples
+            total_examples += batch_size
+            total_loss += float(loss) * batch_size
+            y_pred = F.log_softmax(out, dim=-1).argmax(dim=-1)
+            total_correct += y_pred.eq(y).sum().item()
+    else:
+        for batch in train_loader:
+            optimizer.zero_grad()
+            batch = batch.to(device)
+            batch_size = batch.batch_size
+            out = model(batch.x, batch.edge_index, batch.edge_type)[:batch_size]
+            y = batch.y[:batch_size]
+            loss = criterion(out, y)
+            loss.backward()
+            optimizer.step()
+            scheduler.step()
 
-        total_correct += out[batch.train_mask].argmax(dim=-1).eq(y).sum().item()
-        total_examples += y.size(0)
+            total_examples += batch_size
+            total_loss += float(loss) * batch_size
+            y_pred = F.log_softmax(out, dim=-1).argmax(dim=-1)
+            total_correct += y_pred.eq(y).sum().item()
 
-    return total_loss / total_examples, total_correct / total_examples
+    full_loss = total_loss / total_examples
+    train_score = total_correct / total_examples
+    return full_loss, train_score
 
 @torch.no_grad()
-def test(data, model, hparams, evaluator = None):
+def test(data, model, evaluator = None):
 
     model.eval()
-    if "ogb" in hparams.dataset.name:
+    #if "ogb" in hparams.dataset.name:
+    if evaluator:
         out = model(data.x, data.edge_index)
         y_pred = F.log_softmax(out, dim=-1).argmax(dim=-1, keepdim=True)
 
@@ -91,29 +111,48 @@ def test(data, model, hparams, evaluator = None):
 
 
 @torch.no_grad()
-def test_mini_batch(data, model, evaluator, subgraph_loader, device):
+def test_mini_batch(loader, data, model, device, mask, evaluator = None):
     model.eval()
+    
+    total_examples = total_correct = 0
+    y_preds = []
+    if evaluator:
+        for batch in loader:
+            batch = batch.to(device)
+            batch_size = batch.batch_size,
 
-    out = model.inference(data.x, subgraph_loader, device)
+            out = model(batch.x, batch.edge_index)[:batch_size]
+            y_pred = F.log_softmax(out, dim=-1).argmax(dim=-1)
+            y = batch.y[:batch_size]
 
-    y_true = data.y
-    y_pred = out.argmax(dim=-1, keepdim=True)
+            total_examples += batch_size
+            total_correct += int((y_pred == y).sum())
 
-    train_acc = evaluator.eval({
-        'y_true': y_true[data.train_mask],
-        'y_pred': y_pred[data.train_mask]
-    })['acc']
-    valid_acc = evaluator.eval({
-        'y_true': y_true[data.valid_mask],
-        'y_pred': y_pred[data.valid_mask]
-    })['acc']
-    test_acc = evaluator.eval({
-        'y_true': y_true[data.test_mask],
-        'y_pred': y_pred[data.test_mask]
-    })['acc']
+            y_preds.append(y_pred)
 
-    return train_acc, valid_acc, test_acc
+        score = evaluator.eval({
+                'y_true': data.y[mask],
+                'y_pred': y_preds,
+            })['acc']
 
+    else:
+        for batch in loader:
+            batch = batch.to(device)
+            batch_size = batch.batch_size
+
+            out = model(batch.x, batch.edge_index, batch.edge_type)[:batch_size]
+            y_pred = F.log_softmax(out, dim=-1).argmax(dim=-1)
+            y = batch.y[:batch_size]
+
+            total_examples += batch_size
+            total_correct += int((y_pred == y).sum())
+
+            y_preds.append(y_pred)
+        score = total_correct / total_examples
+
+    y_preds = torch.cat(y_preds, dim=0)        
+
+    return score, y_preds
 
 
 @hydra.main(config_path="../config", config_name="default_config.yaml")
@@ -121,7 +160,7 @@ def train_GCN(config):
 
     hparams = config.gcn.hyperparameters
     print(f"configuration: \n {OmegaConf.to_yaml(hparams)}")
-    wandb.init(project="master-thesis", config = hparams, group = "gcn")
+    wandb.init(project="master-thesis", config = hparams, group = hparams["model"])
     orig_cwd = hydra.utils.get_original_cwd()
     logging.info("Configuration: {0}".format(hparams))
     
@@ -129,13 +168,22 @@ def train_GCN(config):
         data = load_data(hparams.dataset.name, orig_cwd + config.root)
         num_classes = len(np.unique(data[0].y))
         evaluator = Evaluator(name=hparams.dataset.name)
-        model = GCN(data[0].x.shape[1], hparams["hidden_channels"], num_classes, hparams["dropout_p"], hparams["num_layers"]).to(device)
+        if hparams["model"] == "gcn":
+            model = GCN(data[0].x.shape[1], hparams["hidden_channels"], num_classes, hparams["dropout_p"], hparams["num_layers"]).to(device)
+        elif hparams["model"] == "gat":
+            model = GAT(data[0].x.shape[1], hparams["hidden_channels"], num_classes, hparams["dropout_p"], hparams["heads"], hparams["num_layers"]).to(device)
+
     else:
         data = load_data(hparams.dataset.name, orig_cwd)
         num_classes = len(np.unique(data.y))
-        model = RGCN(data.x.shape[1], hparams["hidden_channels"], num_classes, 2, hparams["dropout_p"],
+        if hparams["model"] == "gcn":
+            model = RGCN(data.x.shape[1], hparams["hidden_channels"], num_classes, 2, hparams["dropout_p"],
                      hparams["num_bases"], hparams["num_layers"]).to(device)
-    log_details_to_wandb("gcn", hparams)
+        elif hparams["model"] == "gat":
+            model = RGAT(data.x.shape[1], hparams["hidden_channels"], num_classes, 2, hparams["dropout_p"], hparams["heads"],
+                        hparams["num_bases"], hparams["num_layers"]).to(device)
+
+    log_details_to_wandb(hparams["model"], hparams)
     logging.info("Data loaded.")
     data = pyg_data_split(data, hparams.dataset.name, hparams.dataset.random_split)
     data.x, data.y = data.x.float(), data.y.long()
@@ -146,27 +194,58 @@ def train_GCN(config):
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=hparams["scheduler_step_size"], gamma=0.3, verbose=False)
     criterion = nn.CrossEntropyLoss()
 
-    for epoch in range(epochs):
+    if not hparams["mini_batch"]:
+        for epoch in range(epochs):
 
-        loss = train(data, model, optimizer, scheduler, criterion, hparams)
+            loss, train_score = train(data, model, optimizer, scheduler, criterion, hparams)
+
+            if "ogb" in hparams.dataset.name:
+                train_score, valid_score = test(data, model, evaluator)
+            else:
+                train_score, valid_score = test(data, model)
+
+            logging.info("Epoch %d: Loss: %f, Train Accuracy: %f, Valid Accuracy: %f" % (epoch+1, loss, train_score, valid_score))
+            wandb.log({"train_score": train_score, "valid_score": valid_score})
+        # Final evaluation on a test set
+        model.eval()
 
         if "ogb" in hparams.dataset.name:
-            train_score, valid_score = test(data, model, hparams, evaluator)
+            out = model(data.x, data.edge_index)
         else:
-            train_score, valid_score = test(data, model, hparams)
+            out = model(data.x, data.edge_index, data.edge_type)
+        y_pred = F.log_softmax(out, dim=-1).argmax(dim=-1, keepdim=True)
+        y_pred = y_pred.detach().cpu().numpy()[data.test_mask]
 
-        logging.info("Epoch %d: Loss: %f, Train Accuracy: %f, Valid Accuracy: %f" % (epoch+1, loss, train_score, valid_score))
-        wandb.log({"train_score": train_score, "valid_score": valid_score})
-    # Final evaluation on a test set
-    model.eval()
-    if "ogb" in hparams.dataset.name:
-        out = model(data.x, data.edge_index)
     else:
-        out = model(data.x, data.edge_index, data.edge_type)
-    y_pred = F.log_softmax(out).argmax(dim=-1, keepdim=True)
-    y_pred = y_pred.detach().cpu().numpy()
+        data.num_nodes = data.x.shape[0]
+        data.n_id = torch.arange(data.num_nodes)
+        train_loader = NeighborLoader(data, num_neighbors=[10]+[5]*(hparams["num_layers"]-1), shuffle=True,
+                              input_nodes=data.train_mask, batch_size = hparams["batch_size"], num_workers = n_cores)
+        val_loader = NeighborLoader(data, num_neighbors=[10]+[5]*(hparams["num_layers"]-1),
+                            input_nodes=data.valid_mask, batch_size = hparams["batch_size"], num_workers = n_cores)
+        test_loader = NeighborLoader(data, num_neighbors=[10]+[5]*(hparams["num_layers"]-1),
+                            input_nodes=data.test_mask, batch_size = hparams["batch_size"], num_workers = n_cores)
+
+        for epoch in range(epochs):
+            loss, train_score = train_mini_batch(train_loader, model, optimizer, scheduler, criterion, device, hparams)
+
+            if "ogb" in hparams.dataset.name:
+                valid_score, _ = test_mini_batch(val_loader, data, model, device, data.valid_mask, evaluator)
+            else:
+                valid_score, _ = test_mini_batch(val_loader, data, model, device, data.valid_mask)
+
+            logging.info("Epoch %d: Loss: %f, Train Accuracy: %f, Valid Accuracy: %f" % (epoch+1, loss, train_score, valid_score))
+            wandb.log({"train_score": train_score, "valid_score": valid_score})
+
+        # Final evaluation on a test set
+        if "ogb" in hparams.dataset.name:
+            valid_score, y_pred = test_mini_batch(test_loader, data, model, device, data.test_mask, evaluator)
+        else:
+            valid_score, y_pred = test_mini_batch(test_loader, data, model, device, data.test_mask)        
+
+    y_pred = y_pred.cpu()
     data = data.cpu()
-    test_score, f1, recall, precision = eval_classifier(data.y[data.test_mask], y_pred[data.test_mask])
+    test_score, f1, recall, precision = eval_classifier(data.y[data.test_mask], y_pred)
     logging.info("Test Accuracy: %f,\nF1:\nWeighted: %f, Macro: %f,\nRecall:\nWeighted: %f, Macro: %F,\nPrecision:\nWeighted:%f, Macro: %f" % (test_score,
                                                                                         f1[0], f1[1],
                                                                                         recall[0], recall[1],
@@ -174,134 +253,7 @@ def train_GCN(config):
     wandb.log({"test_score": test_score,
         "test_f1_weighted": f1[0], "test_f1_macro": f1[1], "test_recall_weighted": recall[0],
         "test_recall_macro": recall[1], "test_prec_weighted": precision[0], "test_prec_macro":precision[1]})
-    
-
-@hydra.main(config_path="../config", config_name="default_config.yaml")
-def train_GAT(config):
-    
-    hparams = config.gat.hyperparameters
-    print(f"configuration: \n {OmegaConf.to_yaml(hparams)}")
-    wandb.init(project="master-thesis", config = hparams, group = "gat")
-    orig_cwd = hydra.utils.get_original_cwd()
-    logging.info("Configuration: {0}".format(hparams))
-
-    if "ogb" in hparams.dataset.name:
-        data = load_data(hparams.dataset.name, orig_cwd + config.root)
-        num_classes = len(np.unique(data[0].y))
-        evaluator = Evaluator(name=hparams.dataset.name)
-        model = GAT(data[0].x.shape[1], hparams["hidden_channels"], num_classes, hparams["dropout_p"], hparams["heads"]).to(device)
-    else:
-        data = load_data(hparams.dataset.name, orig_cwd)
-        num_classes = len(np.unique(data.y))
-        model = RGAT(data.x.shape[1], hparams["hidden_channels"], num_classes, 2, hparams["dropout_p"], hparams["heads"],
-                        hparams["num_bases"]).to(device)
-    log_details_to_wandb("gat", hparams)
-    logging.info("Data loaded.")
-    data = pyg_data_split(data, hparams.dataset.name, hparams.dataset.random_split)
-    data.x, data.y = data.x.float(), data.y.long()
-    data = data.to(device)
-
-    epochs = hparams["epochs"]
-    optimizer = torch.optim.Adam(model.parameters(), lr=hparams["lr"], weight_decay=5e-4)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=hparams["scheduler_step_size"], gamma=hparams["scheduler_gamma"], verbose=False)
-    criterion = nn.CrossEntropyLoss()
-
-    for epoch in range(epochs):
-    
-        loss = train(data, model, optimizer, scheduler, criterion, hparams)
-
-        if "ogb" in hparams.dataset.name:
-            train_score, valid_score = test(data, model, hparams, evaluator)
-        else:
-            train_score, valid_score = test(data, model, hparams)
-
-        logging.info("Epoch %d: Loss: %f, Train Accuracy: %f, Valid Accuracy: %f" % (epoch+1, loss, train_score, valid_score))
-        wandb.log({"train_score": train_score, "valid_score": valid_score})
-    # Final evaluation on a test set
-    model.eval()
-    if "ogb" in hparams.dataset.name:
-        out = model(data.x, data.edge_index)
-    else:
-        out = model(data.x, data.edge_index, data.edge_type)
-    y_pred = F.log_softmax(out).argmax(dim=-1, keepdim=True)
-    y_pred = y_pred.detach().cpu().numpy()
-    data = data.cpu()
-    test_score, f1, recall, precision = eval_classifier(data.y[data.test_mask], y_pred[data.test_mask])
-    logging.info("Test Accuracy: %f,\nF1:\nWeighted: %f, Macro: %f,\nRecall:\nWeighted: %f, Macro: %F,\nPrecision:\nWeighted:%f, Macro: %f" % (test_score,
-                                                                                        f1[0], f1[1],
-                                                                                        recall[0], recall[1],
-                                                                                        precision[0], precision[1]))
-    wandb.log({"test_score": test_score,
-        "test_f1_weighted": f1[0], "test_f1_macro": f1[1], "test_recall_weighted": recall[0],
-        "test_recall_macro": recall[1], "test_prec_weighted": precision[0], "test_prec_macro":precision[1]})
-    
-
-
-@hydra.main(config_path="../config", config_name="default_config.yaml")
-def train_GCN_mini_batch(config):
-
-    hparams = config.gcn.hyperparameters
-    print(f"configuration: \n {OmegaConf.to_yaml(hparams)}")
-    wandb.init(project="master-thesis", config = hparams, group = "gcn")
-    orig_cwd = hydra.utils.get_original_cwd()
-    logging.info("Configuration: {0}".format(hparams))
-    
-    if "ogb" in hparams.dataset.name:
-        data = load_data(hparams.dataset.name, orig_cwd + config.root)
-        num_classes = len(np.unique(data[0].y))
-        evaluator = Evaluator(name=hparams.dataset.name)
-        model = GCN(data[0].x.shape[1], hparams["hidden_channels"], num_classes, hparams["dropout_p"]).to(device)
-    else:
-        data = load_data(hparams.dataset.name, orig_cwd)
-        num_classes = len(np.unique(data.y))
-        model = RGCN(data.x.shape[1], hparams["hidden_channels"], num_classes, 2, hparams["dropout_p"], hparams["num_bases"]).to(device)
-    log_details_to_wandb("gcn", hparams)
-    logging.info("Data loaded.")
-    data = pyg_data_split(data, hparams.dataset.name, hparams.dataset.random_split)
-    data.x, data.y = data.x.float(), data.y.long()
-    
-    cluster_data = ClusterData(data, num_parts=15000,
-                               recursive=False)
-
-    loader = ClusterLoader(cluster_data, batch_size=32,
-                           shuffle=True, num_workers=n_cores)
-
-    subgraph_loader = NeighborSampler(data.edge_index, sizes=[-1],
-                                      batch_size=1024, shuffle=False,
-                                      num_workers=n_cores)
-
-    epochs = hparams["epochs"]
-    optimizer = torch.optim.Adam(model.parameters(), lr=hparams["lr"], weight_decay=5e-4)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=hparams["scheduler_step_size"], gamma=0.3, verbose=False)
-    criterion = nn.CrossEntropyLoss()
-
-    for epoch in range(epochs):
-
-        loss = train_mini_batch(loader, model, optimizer, scheduler, criterion, device)
-
-        if "ogb" in hparams.dataset.name:
-            train_score, valid_score = test_mini_batch(data, model, evaluator, subgraph_loader, device)
-        else:
-            train_score, valid_score = test_mini_batch(data, model, hparams)
-
-        logging.info("Epoch %d: Loss: %f, Train Accuracy: %f, Valid Accuracy: %f" % (epoch+1, loss, train_score, valid_score))
-        wandb.log({"train_score": train_score, "valid_score": valid_score})
-    # Final evaluation on a test set
-    model.eval()
-    if "ogb" in hparams.dataset.name:
-        out = model(data.x, data.edge_index)
-    else:
-        out = model(data.x, data.edge_index, data.edge_type)
-    y_pred = F.log_softmax(out).argmax(dim=-1, keepdim=True)
-    test_score, f1, recall, precision = eval_classifier(data.y[data.test_mask], y_pred[data.test_mask])
-    logging.info("Test Accuracy: %f,\nF1:\nWeighted: %f, Macro: %f,\nRecall:\nWeighted: %f, Macro: %F,\nPrecision:\nWeighted:%f, Macro: %f" % (test_score,
-                                                                                        f1[0], f1[1],
-                                                                                        recall[0], recall[1],
-                                                                                        precision[0], precision[1]))
-    wandb.log({"test_score": test_score,
-        "test_f1_weighted": f1[0], "test_f1_macro": f1[1], "test_recall_weighted": recall[0],
-        "test_recall_macro": recall[1], "test_prec_weighted": precision[0], "test_prec_macro":precision[1]})
-
+        
 
 if __name__ == "__main__":
     
