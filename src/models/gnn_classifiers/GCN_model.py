@@ -19,12 +19,7 @@ class GCN(nn.Module):
             self.batch_norms.append(BatchNorm(hidden_channels))
         self.convs.append(GCNConv(hidden_channels, out_channels))
         self.dropout = nn.Dropout(dropout)
-        # self.conv1 = GCNConv(in_channels, hidden_channels, cached=False)
-        # self.conv2 = GCNConv(hidden_channels, hidden_channels, cached=False)
-        # self.conv3 = GCNConv(hidden_channels, out_channels)
-        # self.linear = nn.Linear(hidden_channels, out_channels)
-        
-        # self.batch_norm1 = nn.BatchNorm1d(hidden_channels)
+
 
     def forward(self, x: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
         if x.ndim != 2:
@@ -38,13 +33,6 @@ class GCN(nn.Module):
             x = self.dropout(x)
         x = self.convs[-1](x, edge_index)
 
-        # x = self.batch_norm1(self.conv1(x, edge_index))
-        # x = self.dropout(F.relu(x))
-        # x = self.batch_norm1(self.conv2(x, edge_index))
-        # x = self.dropout(F.relu(x))
-        # x = self.conv3(x, edge_index)
-        # x = self.dropout(F.relu(x))
-        # x = self.linear(x)
         return x
 
     def inference(self, x_all, subgraph_loader, device):
@@ -86,12 +74,8 @@ class RGCN(torch.nn.Module):
         self.batch_norm1 = nn.BatchNorm1d(hidden_channels)
         self.batch_norm2 = nn.BatchNorm1d(hidden_channels)
 
+
     def forward(self, x, edge_index, edge_type):
-        # for i, conv in enumerate(self.convs):
-        #     x = conv(x, edge_index, edge_type)
-        #     if i < len(self.convs) - 1:
-        #         x = x.relu()
-        #         x = F.dropout(x)
         for conv, batch_norm in zip(self.convs[:-1], self.batch_norms):
             x = conv(x, edge_index, edge_type)
             x = batch_norm(x)
@@ -99,11 +83,4 @@ class RGCN(torch.nn.Module):
             x = self.dropout(x)
         x = self.convs[-1](x, edge_index, edge_type)
 
-        # x = self.batch_norm1(self.conv1(x, edge_index, edge_type))
-        # x = self.dropout(F.relu(x))
-        # x = self.batch_norm2(self.conv2(x, edge_index, edge_type))
-        # x = self.dropout(F.relu(x))
-        # x = self.conv3(x, edge_index, edge_type)
-        # x = self.dropout(F.relu(x))
-        # x = self.linear(x)
         return x
