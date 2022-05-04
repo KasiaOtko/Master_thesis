@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 import os
+
+import numpy as np
 import pandas as pd
 import torch
-import numpy as np
 import torch_geometric.data  # type: ignore
-from ogb.nodeproppred import PygNodePropPredDataset, NodePropPredDataset
+from ogb.nodeproppred import NodePropPredDataset, PygNodePropPredDataset
 
 # sys.path.append("..")
 

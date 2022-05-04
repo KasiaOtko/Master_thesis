@@ -1,21 +1,23 @@
-import numpy as np
-import pandas as pd
+import logging
 import multiprocessing
 import sys
-import logging
-from sklearn.linear_model import LogisticRegression
-from nltk.tokenize import word_tokenize
+
+import hydra
+import numpy as np
+import pandas as pd
+import torch
+import torch.nn as nn
+import torch.optim as optim
 from gensim.models.doc2vec import Doc2Vec, TaggedDocument
+from nltk.tokenize import word_tokenize
+from omegaconf import OmegaConf
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
+
+import wandb
+from models.FFNN_model import FFNNClassifier
 from src.data.make_dataset import load_data
 from src.models.utils import data_split
-from models.FFNN_model import FFNNClassifier
-import wandb
-import hydra
-import torch
-import torch.optim as optim
-import torch.nn as nn
-from omegaconf import OmegaConf
 
 sys.path.append("..")
 n_cores = multiprocessing.cpu_count()

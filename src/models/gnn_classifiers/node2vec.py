@@ -1,20 +1,23 @@
-from cgi import test
-import torch
-import torch.optim as optim
-import torch.nn as nn
-import numpy as np
-from sklearn.metrics import accuracy_score
-from torch_geometric.nn import Node2Vec
-from src.data.make_dataset import load_data
-from src.models.utils import pyg_data_split, data_split, log_details_to_wandb, draw_learning_curve
-from models.FFNN_model import FFNNClassifier
-import hydra
-import wandb
-from omegaconf import OmegaConf
+import csv
+import logging
 import multiprocessing
 import sys
-import logging
-import csv
+from cgi import test
+
+import hydra
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from omegaconf import OmegaConf
+from sklearn.metrics import accuracy_score
+from torch_geometric.nn import Node2Vec
+
+import wandb
+from models.FFNN_model import FFNNClassifier
+from src.data.make_dataset import load_data
+from src.models.utils import (data_split, draw_learning_curve,
+                              log_details_to_wandb, pyg_data_split)
 
 sys.path.append("..")
 n_cores = multiprocessing.cpu_count()
