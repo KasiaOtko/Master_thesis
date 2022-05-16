@@ -6,7 +6,6 @@ import sys
 import hydra
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -15,7 +14,6 @@ from omegaconf import DictConfig, OmegaConf
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
-from sklearn.model_selection import RandomizedSearchCV
 from sklearn.svm import SVC
 from sklearnex import patch_sklearn
 
@@ -29,20 +27,6 @@ from src.models.utils import (data_split, eval_classifier,
 sys.path.append("..")
 n_cores = multiprocessing.cpu_count()
 
-# parser = argparse.ArgumentParser()
-# parser.add_argument(
-    # "dataset_name",
-    # choices=["ogbn-products", "ogbn-arxiv", "EU-judgements"],
-    # help="Name of the dataset to use (possible: 'ogbn-products', 'ogbn-arxiv', 'EU-judgements')",
-# )
-# parser.add_argument(
-#     "--root", default="data/raw", help="Root directory of a folder storing OGB dataset"
-# )
-# parser.add_argument("--model", choices=["lr", "ffnn", "xgb"], help="Model to tune")
-
-# parser.add_argument("--lr_C_range", nargs="*", type=float, default=[0.01,0.1,1,10,100,1000], 
-#                     help="Regularization strength for Logistic Regression model")
-
 logging.basicConfig(
     filename="logs/ml_classifiers.txt",
     filemode="a",
@@ -51,7 +35,6 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 
-# args = parser.parse_args()
 
 @hydra.main(config_path="../config", config_name="default_config.yaml")
 def Run_log_reg(config : DictConfig):

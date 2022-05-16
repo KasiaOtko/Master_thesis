@@ -11,7 +11,7 @@ import wandb
 
 
 def pyg_random_split(data, train_ratio = 0.8, valid_ratio = 0.25):
-
+    
     train_ratio = train_ratio
     valid_ratio = valid_ratio
     num_nodes = data.x.shape[0]
@@ -151,10 +151,11 @@ def data_split(data, dataset, scale = False, to_numpy = False, random_split = Fa
     return X_train, y_train, X_valid, y_valid, X_test, y_test
 
 
-def log_details_to_wandb(model, hparams):
+def log_details_to_wandb(model, hparams, n_trainable_params):
     wandb.log({"model": model,
                "dataset": hparams.dataset.name, 
-               "random_split": hparams.dataset.random_split})
+               "random_split": hparams.dataset.random_split,
+               "model_params": n_trainable_params})
 
 def prediction_scores(model, X_train, y_train, X_valid, y_valid, X_test = None, y_test = None):
 

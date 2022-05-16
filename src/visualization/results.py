@@ -1,3 +1,4 @@
+# %%
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
@@ -6,19 +7,19 @@ import torch
 from ogb.nodeproppred import PygNodePropPredDataset
 from torch_geometric.utils import degree
 
-
+# %%
 def accuracy_per_degree(model, dataset):
     if dataset == "ogbn-products":
-        G_pyg = PygNodePropPredDataset(name='ogbn-products')[0]
+        G_pyg = PygNodePropPredDataset(name='ogbn-products', root="data/raw/")[0]
     elif dataset == "ogbn-arxiv":
         G_pyg = PygNodePropPredDataset(name='ogbn-arxiv')[0]
     else:
-        G_pyg = torch.load("Data/EU_judgements/G_big_final.pt")
-    preds = np.load("REPO/models/preds/{}_{}.npy".format(model, dataset)).reshape(-1)
-    G_pyg.preds = preds
+        G_pyg = torch.load("data/processed/G_big_final.pt")
+    preds = np.load("models/preds/{}_{}.npy".format(model, dataset)).reshape(-1)
+    targs = np.load("models/targets/{}_{}.npy".format(model, dataset)).reshape(-1)
     G_pyg.degree = degree(G_pyg.edge_index[0], G_pyg.x.shape[0])
     
-    df = pd.DataFrame((G_pyg.y.numpy(), G_pyg.preds, G_pyg.degree.numpy().astype(int))).T
+    df = pd.DataFrame((targs, preds, G_pyg.degree.numpy().astype(int))).T
     df.columns = ["y", "pred", "degree"]
     df["degree_"] = df["degree"].apply(lambda x: x if x <= 10 else "> 10")
     df["correct"] = df["y"] == df["pred"]
@@ -28,7 +29,8 @@ def accuracy_per_degree(model, dataset):
     plt.bar(summary.index.astype(str), summary.values)
     plt.xlabel("Degree"); plt.ylabel("Accuracy")
     plt.title("Accuracy per node degree ({} model, {} dataset)".format(model.upper(), dataset))
-    
+    plt.show()
+    a=1
 
 def misclass_edge_types(model, dataset):
     if dataset == "ogbn-products":
@@ -53,3 +55,6 @@ def misclass_edge_types(model, dataset):
     proportions = [np.mean(edge_type) for edge_type in edge_types]
     
     return proportions, proportions_mis
+
+# %% 
+accuracy_per_degree("gcn", "EU_judgements")

@@ -5,7 +5,8 @@ import numpy as np
 import pandas as pd
 import torch
 import torch_geometric.data  # type: ignore
-from ogb.nodeproppred import NodePropPredDataset, PygNodePropPredDataset
+import torch_geometric.transforms as T
+from ogb.nodeproppred import PygNodePropPredDataset
 
 # sys.path.append("..")
 
@@ -16,7 +17,7 @@ def load_data(dataset_name: str, root: str) -> torch_geometric.data.Data:
     """
 
     if "ogb" in dataset_name:
-        dataset = PygNodePropPredDataset(name=dataset_name, root=root)
+        dataset = PygNodePropPredDataset(name=dataset_name, root=root, transform=T.ToSparseTensor())
         return dataset
     else:
         #meta_dict = torch.load(root+"/submission_ogbn_eujudgements/meta_dict.pt")

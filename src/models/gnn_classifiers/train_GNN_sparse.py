@@ -34,9 +34,9 @@ logging.basicConfig(
 def train(data, model, optimizer, scheduler, criterion, hparams):
     model.train()
     if hparams.model == 'rgcn':
-        _, out = model(data.x, data.edge_index, data.edge_type)
+        _, out = model(data.x, data.adj_t, data.edge_type)
     else:
-        _, out = model(data.x, data.edge_index)
+        _, out = model(data.x, data.adj_t)
     loss = criterion(out[data.train_mask], data.y[data.train_mask].reshape(-1))
     loss.backward()
     optimizer.step()
@@ -44,7 +44,7 @@ def train(data, model, optimizer, scheduler, criterion, hparams):
     optimizer.zero_grad()
 
     y_pred = F.log_softmax(out[data.train_mask], dim=-1).argmax(dim=-1)
-    train_score = y_pred.eq(data.y[data.train_mask]).sum().item() / data.train_mask.sum().item()
+    train_score = y_pred.eq(data.y[data.train_mask].reshape(-1)).sum().item() / data.train_mask.sum().item()
 
     return loss, train_score
 
@@ -59,7 +59,7 @@ def train_mini_batch(train_loader, model, optimizer, scheduler, criterion, devic
             optimizer.zero_grad()
             batch = batch.to(device)
             batch_size = batch.batch_size
-            _, out = model(batch.x, batch.edge_index)[:batch_size]
+            _, out = model(batch.x, batch.adj_t)[:batch_size]
             y = batch.y[:batch_size]
             loss = criterion(out, y)
             loss.backward()
@@ -76,9 +76,9 @@ def train_mini_batch(train_loader, model, optimizer, scheduler, criterion, devic
             batch = batch.to(device)
             batch_size = batch.batch_size
             if hparams.model != 'rgcn':
-                _, out = model(batch.x, batch.edge_index)[:batch_size]
+                _, out = model(batch.x, batch.adj_t)[:batch_size]
             else:
-                _, out = model(batch.x, batch.edge_index, batch.edge_type)[:batch_size]
+                _, out = model(batch.x, batch.adj_t, batch.edge_type)[:batch_size]
             y = batch.y[:batch_size].reshape(-1)
             loss = criterion(out, y)
             loss.backward()
@@ -100,8 +100,8 @@ def test(data, model, hparams, evaluator = None):
 
     model.eval()
     if evaluator:
-        _, out = model(data.x, data.edge_index)
-        y_pred = F.log_softmax(out, dim=-1).argmax(dim=-1)
+        _, out = model(data.x, data.adj_t)
+        y_pred = F.log_softmax(out, dim=-1).argmax(dim=-1, keepdim=True)
 
         valid_score = evaluator.eval({
             'y_true': data.y[data.valid_mask],
@@ -110,11 +110,11 @@ def test(data, model, hparams, evaluator = None):
 
     else:
         if hparams.model != 'rgcn':
-            _, out = model(data.x, data.edge_index)
+            _, out = model(data.x, data.adj_t)
         else:
-            _, out = model(data.x, data.edge_index, data.edge_type) 
+            _, out = model(data.x, data.adj_t, data.edge_type) 
         y_pred = F.log_softmax(out, dim=-1).argmax(dim=-1)[data.valid_mask]
-        y = data.y[data.valid_mask]
+        y = data.y[data.valid_mask].reshape(-1)
         valid_score = y_pred.eq(y).sum().item() / data.valid_mask.sum().item()
 
     return valid_score
@@ -130,7 +130,7 @@ def test_mini_batch(loader, model, device, hparams, evaluator = None):
         for batch in loader:
             batch = batch.to(device)
             batch_size = batch.batch_size
-            _, out = model(batch.x, batch.edge_index)[:batch_size]
+            _, out = model(batch.x, batch.adj_t)[:batch_size]
             y_pred = F.log_softmax(out, dim=-1).argmax(dim=-1)
             y = batch.y[:batch_size]
 
@@ -151,9 +151,9 @@ def test_mini_batch(loader, model, device, hparams, evaluator = None):
             batch_size = batch.batch_size
 
             if hparams.model != 'rgcn':
-                _, out = model(batch.x, batch.edge_index)[:batch_size]
+                _, out = model(batch.x, batch.adj_t)[:batch_size]
             else:
-                _, out = model(batch.x, batch.edge_index, batch.edge_type)[:batch_size]
+                _, out = model(batch.x, batch.adj_t, batch.edge_type)[:batch_size]
             y_pred = F.log_softmax(out, dim=-1).argmax(dim=-1)
             y = batch.y[:batch_size]
 
@@ -176,10 +176,10 @@ def to_inductive(data, hparams):
     data.train_mask = data.train_mask[mask]
     data.test_mask = None
     if hparams.model != 'rgcn':
-        data.edge_index, _ = subgraph(mask, data.edge_index, None,
+        data.adj_t, _ = subgraph(mask, data.adj_t, None,
                                   relabel_nodes=True, num_nodes=data.num_nodes)
     else:
-        data.edge_index, data.edge_type = subgraph(mask, data.edge_index, data.edge_type,
+        data.adj_t, data.edge_type = subgraph(mask, data.adj_t, data.edge_type,
                                   relabel_nodes=True, num_nodes=data.num_nodes)
     data.num_nodes = mask.sum().item()
     return data
@@ -235,6 +235,7 @@ def train_GCN(config):
     data = pyg_data_split(data, hparams.dataset.name, hparams.dataset.random_split)
     data.x, data.y = data.x.float(), data.y.long()
 
+
     epochs = hparams["epochs"]
     optimizer = torch.optim.Adam(model.parameters(), lr=hparams["lr"], weight_decay=5e-4)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=hparams["scheduler_step_size"], gamma=0.3, verbose=False)
@@ -242,7 +243,6 @@ def train_GCN(config):
 
     if not hparams["inference"]: # TRAIN
         if not hparams["mini_batch"]:
-            sampler_data = data.subgraph(data.train_mask | data.valid_mask)
             sampler_data = data
             if hparams["inductive"]:
                 sampler_data = to_inductive(data, hparams)
@@ -264,9 +264,9 @@ def train_GCN(config):
             model.eval()
 
             if hparams.model == 'rgcn':
-                _, out = model(data.x, data.edge_index, data.edge_type)
+                _, out = model(data.x, data.adj_t, data.edge_type)
             else:
-                _, out = model(data.x, data.edge_index)
+                _, out = model(data.x, data.adj_t)
             y_pred = F.log_softmax(out, dim=-1).argmax(dim=-1, keepdim=True)
             y_pred = y_pred.detach().cpu().numpy()[data.test_mask]
 
@@ -349,9 +349,9 @@ def train_GCN(config):
             model.load_state_dict(torch.load(orig_cwd + "/models/{}_{}.pt".format(hparams.model, hparams.dataset.name), map_location=device))
             model.eval()
             if hparams.model == 'rgcn':
-                h, out = model(data.x, data.edge_index, data.edge_type)
+                h, out = model(data.x, data.adj_t, data.edge_type)
             else:
-                h, out = model(data.x, data.edge_index)
+                h, out = model(data.x, data.adj_t)
             y_pred_full = F.log_softmax(out, dim=-1).argmax(dim=-1, keepdim=True)
             y_pred_test = y_pred_full.detach().cpu().numpy()[data.test_mask]
 

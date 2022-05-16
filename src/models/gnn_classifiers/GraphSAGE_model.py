@@ -1,6 +1,6 @@
 import torch
 import torch.nn.functional as F
-from torch import batch_norm, nn
+from torch import nn
 from torch_geometric.nn import BatchNorm, Linear, SAGEConv  # type: ignore
 
 

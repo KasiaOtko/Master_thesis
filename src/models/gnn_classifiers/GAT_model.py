@@ -163,9 +163,12 @@ class GATv2(torch.nn.Module):
         if self.linear_l:
             x = self.lin1(x).relu()
             for i, (conv, skip, batch_norm) in enumerate(zip(self.convs, self.skips, self.batch_norms)):
-                x = conv(x, edge_index) + skip(x)
                 if i == self.num_layers - 1:
+                    x, (att_index, att_weight) = conv(x, edge_index, return_attention_weights=True)
+                    x = x + skip(x)
                     h = x.clone()
+                else:
+                    x = conv(x, edge_index) + skip(x)
                 x = batch_norm(x)
                 x = F.relu(x)
                 x = self.dropout(x)
@@ -179,8 +182,9 @@ class GATv2(torch.nn.Module):
                 x = batch_norm(x)
                 x = F.relu(x)
                 x = self.dropout(x)
-            x = self.convs[-1](x, edge_index) + self.skips[-1](x)
-        return h, x
+            x, (att_index, att_weight) = self.convs[-1](x, edge_index, return_attention_weights = True) 
+            x = x + self.skips[-1](x)
+        return h, x, (att_index, att_weight)
 
 
 # class GATv2(torch.nn.Module):

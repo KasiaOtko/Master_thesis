@@ -1,6 +1,6 @@
 import torch
 import torch.nn.functional as F
-from torch import batch_norm, nn
+from torch import nn
 from torch_geometric.nn import (BatchNorm, GCNConv, Linear,  # type: ignore
                                 RGCNConv)
 
@@ -16,8 +16,8 @@ class GCN(nn.Module):
         self.batch_norms = torch.nn.ModuleList()
         self.linear_l = linear_l
 
-        self.lin1 = Linear(in_channels, hidden_channels)
         if self.linear_l:
+            self.lin1 = Linear(in_channels, hidden_channels)
             self.convs.append(GCNConv(hidden_channels, hidden_channels, cached=False))
             self.skips.append(Linear(hidden_channels, hidden_channels))
         else:
@@ -38,8 +38,8 @@ class GCN(nn.Module):
         else:
             self.convs.append(GCNConv(hidden_channels, out_channels))
             self.skips.append(Linear(hidden_channels, out_channels))
+
         self.dropout = nn.Dropout(dropout)
-        
 
 
     def forward(self, x: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
@@ -49,25 +49,26 @@ class GCN(nn.Module):
 
         if self.linear_l:
             x = self.lin1(x).relu()
+            h = x
             for i, (conv, skip, batch_norm) in enumerate(zip(self.convs, self.skips, self.batch_norms)):
-                x = conv(x, edge_index) + skip(x)
-                if i == self.num_layers - 1:
-                    h = x.clone()
+                x = conv(x, edge_index) + skip(h)
+                h = x
                 x = batch_norm(x)
                 x = F.relu(x)
                 x = self.dropout(x)
             x = self.lin2(x)
 
         else:
-
+            h = x.clone()
             for i, (conv, skip, batch_norm) in enumerate(zip(self.convs[:-1], self.skips[:-1], self.batch_norms)):
-                x = conv(x, edge_index) + skip(x)
-                if i == self.num_layers - 2:
-                    h = x.clone()
+                x = conv(x, edge_index) + skip(h)
+                h = x.clone()
+                # if i == self.num_layers - 2:
+                #     h = x.clone()
                 x = batch_norm(x)
                 x = F.relu(x)
                 x = self.dropout(x)
-            x = self.convs[-1](x, edge_index) + self.skips[-1](x)
+            x = self.convs[-1](x, edge_index) + self.skips[-1](h)
 
         return h, x
 
@@ -81,29 +82,58 @@ class RGCN(torch.nn.Module):
         self.batch_norms = torch.nn.ModuleList()
         self.linear_l = linear_l
 
-        self.convs.append(RGCNConv(in_channels, hidden_channels, num_relations, num_bases=num_bases))
-        self.skips.append(Linear(in_channels, hidden_channels))
+        if self.linear_l:
+            self.lin1 = Linear(in_channels, hidden_channels)
+            self.convs.append(RGCNConv(hidden_channels, hidden_channels, num_relations, num_bases=num_bases, root_weight = False))
+            self.skips.append(Linear(hidden_channels, hidden_channels))
+        else:
+            self.convs.append(RGCNConv(in_channels, hidden_channels, num_relations, num_bases=num_bases, root_weight = False))
+            self.skips.append(Linear(in_channels, hidden_channels))
         self.batch_norms.append(BatchNorm(hidden_channels))
+
         for _ in range(num_layers - 2):
-            self.convs.append(RGCNConv(hidden_channels, hidden_channels, num_relations, num_bases=num_bases))
+            self.convs.append(RGCNConv(hidden_channels, hidden_channels, num_relations, num_bases=num_bases, root_weight = False))
             self.skips.append(Linear(hidden_channels, hidden_channels))
             self.batch_norms.append(BatchNorm(hidden_channels))
-        self.convs.append(RGCNConv(hidden_channels, hidden_channels, num_relations, num_bases=num_bases))
-        self.skips.append(Linear(hidden_channels, hidden_channels))
+
+        if self.linear_l:
+            self.convs.append(RGCNConv(hidden_channels, hidden_channels, num_relations, num_bases=num_bases, root_weight = False))
+            self.skips.append(Linear(hidden_channels, hidden_channels))
+            self.batch_norms.append(BatchNorm(hidden_channels))
+            self.lin2 = Linear(hidden_channels, out_channels)
+        else:
+            self.convs.append(RGCNConv(hidden_channels, hidden_channels, num_relations, num_bases=num_bases, root_weight = False))
+            self.skips.append(Linear(hidden_channels, hidden_channels))
+        
         self.dropout = nn.Dropout(dropout)
-        self.linear = Linear(hidden_channels, out_channels)
         
 
     def forward(self, x, edge_index, edge_type):
-        for i, (conv, skip, batch_norm) in enumerate(zip(self.convs[:-1], self.skips[:-1], self.batch_norms)):
-            x = conv(x, edge_index, edge_type) + skip(x)
-            if i == self.num_layers - 1:
-                    h = x.copy()
-            x = batch_norm(x)
-            x = F.relu(x)
-            x = self.dropout(x)
-        x = self.convs[-1](x, edge_index, edge_type) + self.skips[-1](x)
 
+        if self.linear_l:
+            x = self.lin1(x).relu()
+            h = x#.clone()
+            for i, (conv, skip, batch_norm) in enumerate(zip(self.convs, self.skips, self.batch_norms)):
+                x = conv(x, edge_index, edge_type) + skip(h)
+                h = x#.clone()
+                # if i == self.num_layers - 1:
+                #     h = x.clone()
+                x = batch_norm(x)
+                x = F.relu(x)
+                x = self.dropout(x)
+            x = self.lin2(x)
+
+        else:
+            h = x.clone()
+            for i, (conv, skip, batch_norm) in enumerate(zip(self.convs[:-1], self.skips[:-1], self.batch_norms)):
+                x = conv(x, edge_index, edge_type) + skip(h)
+                h = x.clone()
+                # if i == self.num_layers - 2:
+                #     h = x.clone()
+                x = batch_norm(x)
+                x = F.relu(x)
+                x = self.dropout(x)
+            x = self.convs[-1](x, edge_index, edge_type) + self.skips[-1](h)
 
         return h, x
 
